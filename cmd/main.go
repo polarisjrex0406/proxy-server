@@ -4,17 +4,33 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
-const (
-	realProxyHost     = "51.81.93.42"
-	realProxyPort     = "9200"
-	realProxyUsername = "country-us"
-	realProxyPassword = "14a4f87c-b238-472b-8f76-17223b6bc79c"
-)
+func LoadConfig() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+}
+
+func GetConfig(configName string) string {
+	return os.Getenv(configName)
+}
+
+func GetProxySettings(providerName string) (string, string, string, string) {
+	host := GetConfig(strings.ToUpper(providerName) + "_HOST")
+	port := GetConfig(strings.ToUpper(providerName) + "_PORT")
+	username := GetConfig(strings.ToUpper(providerName) + "_USERNAME")
+	password := GetConfig(strings.ToUpper(providerName) + "_PASSWORD")
+	return host, port, username, password
+}
 
 func main() {
 	// Define the proxy server address
@@ -40,7 +56,13 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Handle Basic Authentication
 	proxyAuth := r.Header.Get("Proxy-Authorization")
 	credentials, _ := DecodeBasicAuth(proxyAuth)
-	fmt.Println(credentials)
+	parts := strings.Split(credentials, ":")
+	username := parts[0]
+	// password := parts[1]
+
+	// Load Proxy Settings
+	LoadConfig()
+	realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := GetProxySettings(username)
 
 	// Create a new request to the target URL through the real proxy
 	req, err := http.NewRequest(r.Method, parsedURL.String(), r.Body)
@@ -66,13 +88,11 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set up the real proxy
-	proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s@%s:%s/", realProxyUsername, realProxyPassword, realProxyHost, realProxyPort))
+	proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s", realProxyHost, realProxyPort))
 	if err != nil {
 		http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
 		return
 	}
-
-	fmt.Println(proxyURL)
 
 	// Create a client with the proxy
 	client := &http.Client{
@@ -82,6 +102,7 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the request to the real proxy
+	fmt.Println(proxyURL.String())
 	resp, err := client.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to reach real proxy", http.StatusBadGateway)
