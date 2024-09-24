@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -9,8 +11,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 func LoadConfig() {
@@ -32,13 +37,78 @@ func GetProxySettings(providerName string) (string, string, string, string) {
 	return host, port, username, password
 }
 
+func ConnectionString() string {
+	// Get database settings
+	dbUser := GetConfig("DB_USER")
+	dbPassword := GetConfig("DB_PSWD")
+	dbName := GetConfig("DB_NAME")
+	dbSSLMode := GetConfig("DB_SSL_MODE")
+	// Construct the connection string
+	dsn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=%s sslmode=%s",
+		dbUser, dbPassword, dbName, "localhost", "5432", dbSSLMode)
+	return dsn
+}
+
+var (
+	ctx         = context.Background()
+	redisClient *redis.Client
+	DB          *sql.DB
+)
+
+func GetCachedData(redisClient *redis.Client, DB *sql.DB, query string) (string, error) {
+	// Check Redis cache
+	cacheKey := query
+	cachedData, err := redisClient.Get(ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Cache miss, query PostgreSQL
+		var result string
+		err = DB.QueryRow(query).Scan(&result)
+		if err != nil {
+			return "", err
+		}
+
+		// Cache the result in Redis
+		err = redisClient.Set(ctx, cacheKey, result, 1*time.Hour).Err()
+		if err != nil {
+			return "", err
+		}
+
+		return result, nil
+	} else if err != nil {
+		return "", err
+	}
+
+	// Return cached result
+	return cachedData, nil
+}
+
 func main() {
+	LoadConfig()
+	// Test PostgreSQL caching via Redis
+	// Connect to PostgresSQL
+	dbms := GetConfig("DB_TYPE")
+	var err error
+	DB, err = sql.Open(dbms, ConnectionString())
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = DB.Ping(); err != nil {
+		log.Fatal(err)
+	}
+	defer DB.Close()
+	// Connect to Redis
+	redisClient = redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	defer redisClient.Close()
+
 	// Define the proxy server address
 	proxyAddr := "136.243.175.139:8080"
 
 	// Start the proxy server
 	fmt.Printf("Starting proxy server at %s\n", proxyAddr)
 	http.HandleFunc("/", ProxyHandler)
+
 	if err := http.ListenAndServe(proxyAddr, nil); err != nil {
 		fmt.Println("Error starting server:", err)
 	}
@@ -59,9 +129,16 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(credentials, ":")
 	username := parts[0]
 	// password := parts[1]
+	// Example usage
+	query := "SELECT pswd FROM tbl_proxy_credentials ORDER BY id ASC"
+	data, err := GetCachedData(redisClient, DB, query)
+	if err != nil {
+		log.Fatalf("Error getting data: %v\n", err)
+	}
+
+	fmt.Println(data)
 
 	// Load Proxy Settings
-	LoadConfig()
 	realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := GetProxySettings(username)
 
 	// Create a new request to the target URL through the real proxy
@@ -74,18 +151,16 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Copy headers from the original request
 	for key, values := range r.Header {
 		for _, value := range values {
-			if key == "Proxy-Authorization" {
-				// Concatenate username and password
-				realCredentials := fmt.Sprintf("%s:%s", realProxyUsername, realProxyPassword)
-				// Encode to Base64
-				encodedCredentials := base64.StdEncoding.EncodeToString([]byte(realCredentials))
-				// Set the Authorization header
-				req.Header.Add(key, "Basic "+encodedCredentials)
-			} else {
-				req.Header.Add(key, value)
-			}
+			req.Header.Add(key, value)
 		}
 	}
+
+	// Concatenate username and password
+	realCredentials := fmt.Sprintf("%s:%s", realProxyUsername, realProxyPassword)
+	// Encode to Base64
+	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(realCredentials))
+	// Set the Authorization header
+	req.Header.Set("Proxy-Authorization", "Basic "+encodedCredentials)
 
 	// Set up the real proxy
 	proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s", realProxyHost, realProxyPort))
