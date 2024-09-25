@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/omimic12/proxy-server/internal"
 )
 
 func LoadConfig() {
@@ -102,16 +105,48 @@ func main() {
 	})
 	defer redisClient.Close()
 
-	// Define the proxy server address
-	proxyAddr := "136.243.175.139:8080"
+	// httpsServer := &http.Server{
+	// 	Addr:    "0.0.0.0:443",
+	// 	Handler:   http.HandlerFunc(TunnelHandler),
+	// }
+	// ln, err := net.Listen("tcp4", "0.0.0.0:443")
+	// if err != nil {
+	// 	log.Fatal(err.Error())
+	// }
+	// fmt.Println(ln)
+	// go func() {
+	// 	fmt.Println("Proxy: HTTPS Starting :443")
+	// 	defer fmt.Println("Proxy: HTTPS Stopped")
+	// 	if err := httpsServer.Serve(ln); err != nil {
+	// 		fmt.Println("failed to listen ACME TLS")
+	// 	}
+	// }()
 
-	// Start the proxy server
-	fmt.Printf("Starting proxy server at %s\n", proxyAddr)
-	http.HandleFunc("/", ProxyHandler)
+	// // Define the proxy server address
+	// proxyAddr := ":8080"
 
-	if err := http.ListenAndServe(proxyAddr, nil); err != nil {
-		fmt.Println("Error starting server:", err)
+	// // Start the proxy server
+	// fmt.Printf("Starting proxy server at %s\n", proxyAddr)
+	// http.HandleFunc("GET /", ProxyHandler)
+
+	// if err := http.ListenAndServe(proxyAddr, nil); err != nil {
+	// 	fmt.Println("Error starting server:", err)
+	// }
+
+	var addr = flag.String("addr", ":8080", "proxy address")
+	flag.Parse()
+
+	proxy := &internal.ForwardProxy{}
+
+	log.Println("Starting proxy server on", *addr)
+	if err := http.ListenAndServe(*addr, proxy); err != nil {
+		log.Fatal("ListenAndServe:", err)
 	}
+}
+
+func TunnelHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("TunnelHandler:")
+	w.WriteHeader(http.StatusOK)
 }
 
 func ProxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -120,6 +155,30 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		http.Error(w, "Invalid target URL", http.StatusBadRequest)
+		return
+	}
+
+	// Handle CONNECT method for HTTPS
+	if r.Method == http.MethodConnect {
+		// Establish a tunnel to the target server
+		conn, err := net.Dial("tcp", parsedURL.Host)
+		if err != nil {
+			http.Error(w, "Unable to connect to target", http.StatusBadGateway)
+			return
+		}
+		defer conn.Close()
+
+		// Respond to the client that the connection has been established
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "HTTP/1.1 200 Connection Established\r\n\r\n")
+
+		// Create a proxy for the established connection
+		go func() {
+			io.Copy(conn, r.Body) // Copy request body to the server
+		}()
+		go func() {
+			io.Copy(w, conn) // Copy response body to the client
+		}()
 		return
 	}
 
