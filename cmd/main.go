@@ -9,29 +9,30 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	_ "github.com/lib/pq"
-	"github.com/omimic12/proxy-server/internal"
+	"github.com/omimic12/proxy-server/config"
+	"github.com/omimic12/proxy-server/pkg"
 )
 
 var (
 	ctx         = context.Background()
 	redisClient *redis.Client
-	DB          *sql.DB
+	db          *sql.DB
 )
 
 func main() {
-	internal.LoadConfig()
+	config.LoadConfig()
 	// Test PostgreSQL caching via Redis
 	// Connect to PostgresSQL
-	dbms := internal.GetConfig("DB_TYPE")
+	dbms := config.GetConfig("DB_TYPE")
 	var err error
-	DB, err = sql.Open(dbms, internal.ConnectionString())
+	db, err = sql.Open(dbms, config.ConnectionString())
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err = DB.Ping(); err != nil {
+	if err = db.Ping(); err != nil {
 		log.Fatal(err)
 	}
-	defer DB.Close()
+	defer db.Close()
 	// Connect to Redis
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
@@ -43,12 +44,7 @@ func main() {
 	caKeyFile := flag.String("cakeyfile", "/root/.local/share/mkcert/rootCA-key.pem", "key .pem file for trusted CA")
 	flag.Parse()
 
-	// proxy := &internal.ForwardProxy{
-	// 	Ctx:         ctx,
-	// 	RedisClient: redisClient,
-	// 	DB:          DB,
-	// }
-	proxy := internal.CreateMitmProxy(*caCertFile, *caKeyFile)
+	proxy := pkg.CreateMitmProxy(*caCertFile, *caKeyFile, ctx, redisClient, db)
 
 	log.Println("Starting proxy server on", *addr)
 	if err := http.ListenAndServe(*addr, proxy); err != nil {

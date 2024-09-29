@@ -1,4 +1,4 @@
-package internal
+package config
 
 import (
 	"fmt"
@@ -8,6 +8,16 @@ import (
 
 	"github.com/joho/godotenv"
 )
+
+type Config struct {
+	PrimaryDB struct {
+		Type     string `long:"primary-db-type" env:"PRIMARY_DB_TYPE" default:"postgres" description:""`
+		Name     string `long:"primary-db-name" env:"PRIMARY_DB_NAME" default:"mimicproxy" description:""`
+		Username string `long:"primary-db-username" env:"PRIMARY_DB_USERNAME" default:"postgres" description:""`
+		Password string `long:"primary-db-password" env:"PRIMARY_DB_PASSWORD" default:"123456aA@" description:""`
+		SSLMode  string `long:"primary-db-ssl-mode" env:"PRIMARY_DB_SSLMODE" default:"disable" description:""`
+	}
+}
 
 func LoadConfig() {
 	err := godotenv.Load()

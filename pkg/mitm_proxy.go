@@ -1,7 +1,8 @@
-package internal
+package pkg
 
 import (
 	"bufio"
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,6 +10,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -21,45 +24,11 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/omimic12/proxy-server/config"
+	"github.com/omimic12/proxy-server/utils"
 )
-
-func CurrentIP() string {
-	// Get a list of all network interfaces
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		fmt.Println("Error getting interfaces:", err)
-		os.Exit(1)
-	}
-
-	for _, iface := range interfaces {
-		// Skip down interfaces and loopback interfaces
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		// Get the addresses associated with the interface
-		addrs, err := iface.Addrs()
-		if err != nil {
-			fmt.Println("Error getting addresses:", err)
-			continue
-		}
-
-		for _, addr := range addrs {
-			// Get the IP address from the address
-			ipNet, ok := addr.(*net.IPNet)
-			if ok && ipNet.IP != nil {
-				// Check if the IP is IPv4 or IPv6 and print it
-				if ipNet.IP.To4() != nil {
-					fmt.Println("IPv4 Address:", ipNet.IP.String())
-					return ipNet.IP.String()
-				} else {
-					fmt.Println("IPv6 Address:", ipNet.IP.String())
-				}
-			}
-		}
-	}
-	return ""
-}
 
 // createCert creates a new certificate/private key pair for the given domains,
 // signed by the parent/parentKey certificate. hoursValid is the duration of
@@ -143,14 +112,17 @@ func loadX509KeyPair(certFile, keyFile string) (cert *x509.Certificate, key any,
 // mitmProxy is a type implementing http.Handler that serves as a MITM proxy
 // for CONNECT tunnels. Create new instances of mitmProxy using createMitmProxy.
 type mitmProxy struct {
-	caCert *x509.Certificate
-	caKey  any
+	caCert      *x509.Certificate
+	caKey       any
+	ctx         context.Context
+	redisClient *redis.Client
+	db          *sql.DB
 }
 
 // createMitmProxy creates a new MITM proxy. It should be passed the filenames
 // for the certificate and private key of a certificate authority trusted by the
 // client's machine.
-func CreateMitmProxy(caCertFile, caKeyFile string) *mitmProxy {
+func CreateMitmProxy(caCertFile, caKeyFile string, ctx context.Context, redisClient *redis.Client, db *sql.DB) *mitmProxy {
 	caCert, caKey, err := loadX509KeyPair(caCertFile, caKeyFile)
 	if err != nil {
 		log.Fatal("Error loading CA certificate/key:", err)
@@ -158,8 +130,11 @@ func CreateMitmProxy(caCertFile, caKeyFile string) *mitmProxy {
 	log.Printf("loaded CA certificate and key; IsCA=%v\n", caCert.IsCA)
 
 	return &mitmProxy{
-		caCert: caCert,
-		caKey:  caKey,
+		caCert:      caCert,
+		caKey:       caKey,
+		ctx:         ctx,
+		redisClient: redisClient,
+		db:          db,
 	}
 }
 
@@ -176,7 +151,7 @@ func (p *mitmProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodConnect {
 		p.proxyConnect(w, req)
 	} else {
-		http.Error(w, "this proxy only supports CONNECT", http.StatusMethodNotAllowed)
+		p.proxyHandler(w, req)
 	}
 }
 
@@ -252,7 +227,7 @@ func (p *mitmProxy) proxyConnect(w http.ResponseWriter, proxyReq *http.Request) 
 		}
 		// Handle Basic Authentication
 		proxyAuth := r.Header.Get("Proxy-Authorization")
-		credentials, _ := DecodeBasicAuth(proxyAuth)
+		credentials, _ := utils.DecodeBasicAuth(proxyAuth)
 		parts := strings.Split(credentials, ":")
 		username := parts[0]
 		fmt.Println(username)
@@ -262,14 +237,8 @@ func (p *mitmProxy) proxyConnect(w http.ResponseWriter, proxyReq *http.Request) 
 		changeRequestToTarget(r, proxyReq.Host)
 
 		// Proxy Settings
-		realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := GetProxySettings(username)
-		// Concatenate username and password
-		// realCredentials := fmt.Sprintf("%s:%s", realProxyUsername, realProxyPassword)
-		// Encode to Base64
-		// encodedCredentials := base64.StdEncoding.EncodeToString([]byte(realCredentials))
-		// Set the Authorization header
-		// r.Header.Set("Proxy-Authorization", "Basic "+encodedCredentials)
-		// Set up the real proxy
+		realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := config.GetProxySettings(username)
+
 		proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s@%s:%s", realProxyUsername, realProxyPassword, realProxyHost, realProxyPort))
 		if err != nil {
 			http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
@@ -283,7 +252,6 @@ func (p *mitmProxy) proxyConnect(w http.ResponseWriter, proxyReq *http.Request) 
 		}
 
 		// Send the request to the target server and log the response.
-		// resp, err := http.DefaultClient.Do(r)
 		resp, err := client.Do(r)
 		if err != nil {
 			log.Fatal("error sending request to target:", err)
@@ -325,4 +293,90 @@ func addrToUrl(addr string) *url.URL {
 		log.Fatal(err)
 	}
 	return u
+}
+
+func (p *mitmProxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the target URL from the request
+	targetURL := r.URL.String()
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		http.Error(w, "Invalid target URL", http.StatusBadRequest)
+		return
+	}
+
+	// Handle Basic Authentication
+	proxyAuth := r.Header.Get("Proxy-Authorization")
+	credentials, _ := utils.DecodeBasicAuth(proxyAuth)
+	parts := strings.Split(credentials, ":")
+	username := parts[0]
+	// password := parts[1]
+	// Example usage
+	query := "SELECT pswd FROM tbl_proxy_credentials ORDER BY id ASC"
+	data, err := GetCachedData(p.ctx, p.redisClient, p.db, query)
+	if err != nil {
+		log.Fatalf("Error getting data: %v\n", err)
+	}
+
+	fmt.Println(data)
+
+	// Load Proxy Settings
+	realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := config.GetProxySettings(username)
+
+	// Create a new request to the target URL through the real proxy
+	req, err := http.NewRequest(r.Method, parsedURL.String(), r.Body)
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers from the original request
+	for key, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+
+	// Concatenate username and password
+	realCredentials := fmt.Sprintf("%s:%s", realProxyUsername, realProxyPassword)
+	// Encode to Base64
+	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(realCredentials))
+	// Set the Authorization header
+	req.Header.Set("Proxy-Authorization", "Basic "+encodedCredentials)
+
+	// Set up the real proxy
+	proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s", realProxyHost, realProxyPort))
+	if err != nil {
+		http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
+		return
+	}
+
+	// Create a client with the proxy
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+	}
+
+	// Send the request to the real proxy
+	fmt.Println(proxyURL.String())
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to reach real proxy", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy the response headers and status code
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	// Write the response body
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
 }
