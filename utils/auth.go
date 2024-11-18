@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// decodeBasicAuth decodes the Basic Authorization header
+// DecodeBasicAuth decodes the Basic Authorization header
 func DecodeBasicAuth(auth string) (string, error) {
 	// Remove "Basic " prefix
 	encoded := strings.TrimPrefix(auth, "Basic ")

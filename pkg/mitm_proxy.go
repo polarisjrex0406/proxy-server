@@ -119,7 +119,7 @@ type mitmProxy struct {
 	db          *sql.DB
 }
 
-// createMitmProxy creates a new MITM proxy. It should be passed the filenames
+// CreateMitmProxy creates a new MITM proxy. It should be passed the filenames
 // for the certificate and private key of a certificate authority trusted by the
 // client's machine.
 func CreateMitmProxy(caCertFile, caKeyFile string, ctx context.Context, redisClient *redis.Client, db *sql.DB) *mitmProxy {
@@ -143,9 +143,9 @@ func (p *mitmProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Fatal("error splitting host/port:", err)
 	}
-	if host != "136.243.90.46" {
-		http.Error(w, "this proxy only supports for testing", http.StatusForbidden)
-		return
+	if host != "65.108.225.146" {
+		// http.Error(w, "this proxy only supports for testing", http.StatusForbidden)
+		// return
 	}
 
 	if req.Method == http.MethodConnect {
@@ -237,7 +237,7 @@ func (p *mitmProxy) proxyConnect(w http.ResponseWriter, proxyReq *http.Request) 
 		changeRequestToTarget(r, proxyReq.Host)
 
 		// Proxy Settings
-		realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := config.GetProxySettings(username)
+		realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := getProxySettings(username)
 
 		proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s@%s:%s", realProxyUsername, realProxyPassword, realProxyHost, realProxyPort))
 		if err != nil {
@@ -295,6 +295,34 @@ func addrToUrl(addr string) *url.URL {
 	return u
 }
 
+func getProxySettings(providerName string) (string, string, string, string) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	var host, port, username, password string
+	if providerName == "ttproxy" {
+		host = cfg.Provider.TTProxy.ProxyCredentials.Host
+		port = fmt.Sprintf("%d", cfg.Provider.TTProxy.ProxyCredentials.Port)
+	} else if providerName == "dataimpulse" {
+		host = cfg.Provider.DataImpulse.ProxyCredentials.Host
+		port = fmt.Sprintf("%d", cfg.Provider.DataImpulse.ProxyCredentials.Port)
+	} else if providerName == "proxyverse" {
+		host = cfg.Provider.Proxyverse.ProxyCredentials.Host
+		port = fmt.Sprintf("%d", cfg.Provider.Proxyverse.ProxyCredentials.Port)
+		username = cfg.Provider.Proxyverse.ProxyCredentials.Username
+		password = cfg.Provider.Proxyverse.ProxyCredentials.Password
+	} else if providerName == "databay" {
+		host = cfg.Provider.Databay.ProxyCredentials.Host
+		port = fmt.Sprintf("%d", cfg.Provider.Databay.ProxyCredentials.Port)
+		username = cfg.Provider.Databay.ProxyCredentials.Username
+		password = cfg.Provider.Databay.ProxyCredentials.Password
+	}
+
+	return host, port, username, password
+}
+
 func (p *mitmProxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the target URL from the request
 	targetURL := r.URL.String()
@@ -309,18 +337,17 @@ func (p *mitmProxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	credentials, _ := utils.DecodeBasicAuth(proxyAuth)
 	parts := strings.Split(credentials, ":")
 	username := parts[0]
-	// password := parts[1]
+	password := parts[1]
 	// Example usage
-	query := "SELECT pswd FROM tbl_proxy_credentials ORDER BY id ASC"
+	query := fmt.Sprintf("SELECT profile_name, credentials_password FROM tbl_customers WHERE profile_name = %v AND credentials_password = %v", username, password)
 	data, err := GetCachedData(p.ctx, p.redisClient, p.db, query)
 	if err != nil {
 		log.Fatalf("Error getting data: %v\n", err)
 	}
-
 	fmt.Println(data)
 
 	// Load Proxy Settings
-	realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := config.GetProxySettings(username)
+	realProxyHost, realProxyPort, realProxyUsername, realProxyPassword := getProxySettings(username)
 
 	// Create a new request to the target URL through the real proxy
 	req, err := http.NewRequest(r.Method, parsedURL.String(), r.Body)
@@ -342,6 +369,7 @@ func (p *mitmProxy) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(realCredentials))
 	// Set the Authorization header
 	req.Header.Set("Proxy-Authorization", "Basic "+encodedCredentials)
+	fmt.Println("HTTP Outgoing realCredentials: ", realCredentials)
 
 	// Set up the real proxy
 	proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%s", realProxyHost, realProxyPort))
