@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	"time"
+
 	"github.com/detailyang/domaintree-go"
 )
 
@@ -18,5 +20,12 @@ type Purchase struct {
 	WhitelistIP       map[string]struct{}
 	BlockedDomains    *domaintree.DomainTree
 	BlacklistHostname int
-	IPs               map[string]struct{}
+
+	ID          uint
+	TrafficLeft *int
+	IPCount     *int
+	IPs         map[string]struct{}
+	// Threads     *int
+	Region   string
+	ExpireAt time.Time
 }

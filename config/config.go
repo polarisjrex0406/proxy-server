@@ -54,8 +54,20 @@ type Config struct {
 	}
 
 	Redis struct {
+		DSN  string `long:"redis-dsn" env:"REDIS_DSN" default:"redis://localhost:6379" description:""`
 		Host string `long:"redis-host" env:"REDIS_HOST" default:"localhost"`
 		Port int    `long:"redis-port" env:"REDIS_PORT" default:"6379"`
+		DB   struct {
+			Purchase int `long:"redis-db-purchase" env:"REDIS_DB_PURCHASE" default:"1" description:""`
+			Data     int `long:"redis-db-data" env:"REDIS_DB_DATA" default:"2" description:""`
+			Proxy    int `long:"redis-db-proxy" env:"REDIS_DB_PROXY" default:"3" description:""`
+		}
+		Channel struct {
+			User     string `long:"redis-ch-user" env:"REDIS_CH_USER" default:"user" description:""`
+			Data     string `long:"redis-ch-data" env:"REDIS_CH_DATA" default:"data" description:""`
+			Activity string `long:"redis-ch-activity" env:"REDIS_CH_ACTIVITY" default:"activity" description:""`
+			Restart  string `long:"redis-ch-restart" env:"REDIS_CH_RESTART" default:"restart" description:""`
+		}
 	}
 
 	HTTP struct {
@@ -120,5 +132,10 @@ type Config struct {
 
 	Accountant struct {
 		Bytes int64 `long:"accountant-bytes" env:"ACCOUNTANT_BYTES" default:"256000" description:""`
+	}
+
+	Authorization struct {
+		CacheSize int           `long:"authorization-cache-size" env:"AUTHORIZATION_CACHE_SIZE" default:"1000" description:""`
+		TTL       time.Duration `long:"authorization-ttl" env:"AUTHORIZATION_TTL" default:"5m" description:""`
 	}
 }

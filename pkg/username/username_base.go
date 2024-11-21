@@ -75,8 +75,23 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 	}
 
 	for i, p := range params {
+		switch i {
+		case 0:
+			req.ProfileName = p
+		case 1:
+			req.Product = p
+		case 2:
+			req.Category = p
+		case 3:
+			purchaseId, err := strconv.Atoi(zerocopy.String(p))
+			if err != nil {
+				return err
+			}
+			req.PurchaseID = uint(purchaseId)
+		}
+
 		i++
-		if i%2 == 0 {
+		if i%2 == 0 || i <= 3 {
 			continue
 		}
 
@@ -114,9 +129,9 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 		}
 	}
 
-	if req.Country == nil && req.Region == nil && req.City == nil && req.IP == nil {
-		return ErrInvalidTargeting
-	}
+	// if req.Country == nil && req.Region == nil && req.City == nil && req.IP == nil {
+	// 	return ErrInvalidTargeting
+	// }
 
 	var c gountries.Country
 	if (req.Country != nil && !bytes.EqualFold(req.Country, byteUsernameRandom)) && req.City == nil {

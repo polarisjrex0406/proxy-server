@@ -12,15 +12,15 @@ import (
 	"github.com/omimic12/proxy-server/config"
 	"github.com/omimic12/proxy-server/database"
 	"github.com/omimic12/proxy-server/pkg"
+	"github.com/omimic12/proxy-server/pkg/auth"
 	"github.com/omimic12/proxy-server/pkg/username"
 	"github.com/pariz/gountries"
 	"go.uber.org/zap"
 )
 
 var (
-	ctx         = context.Background()
-	redisClient *redis.Client
-	db          *sql.DB
+	ctx = context.Background()
+	db  *sql.DB
 )
 
 func main() {
@@ -44,16 +44,60 @@ func main() {
 
 	parser := username.NewBaseUsername(cfg.Session.Duration, cfg.Session.DurationMax, gountries.New())
 
-	// Test PostgreSQL caching via Redis
 	// Connect to PostgresSQL
 	db = database.Connect()
 	defer db.Close()
 
 	// Connect to Redis
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
-	})
-	defer redisClient.Close()
+	options, err := redis.ParseURL(fmt.Sprintf("%s/%d", cfg.Redis.DSN, cfg.Redis.DB.Data))
+	if err != nil {
+		panic(err)
+	}
+
+	redisData := redis.NewClient(options)
+	defer redisData.Close() //nolint:errcheck
+
+	_, err = redisData.Ping(context.Background()).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	options, err = redis.ParseURL(fmt.Sprintf("%s/%d", cfg.Redis.DSN, cfg.Redis.DB.Purchase))
+	if err != nil {
+		logger.Panic("failed to parse redis purchase database", zap.Error(err))
+	}
+
+	redisPurchase := redis.NewClient(options)
+	defer redisPurchase.Close() //nolint:errcheck
+
+	options, err = redis.ParseURL(fmt.Sprintf("%s/%d", cfg.Redis.DSN, cfg.Redis.DB.Proxy))
+	if err != nil {
+		logger.Panic("failed to parse redis proxy database", zap.Error(err))
+	}
+
+	redisProxy := redis.NewClient(options)
+	defer redisProxy.Close() //nolint:errcheck
+
+	_, err = redisProxy.Ping(ctx).Result()
+	if err != nil {
+		logger.Panic("failed to ping redis proxy database", zap.Error(err))
+	}
+
+	a, err := auth.NewRedisGCache(
+		ctx,
+		cfg.Authorization.CacheSize,
+		cfg.Authorization.TTL,
+		cfg.Redis.Channel.User,
+		redisData,
+		redisPurchase,
+		parser,
+		logger,
+
+		db,
+	)
+	if err != nil {
+		panic(err)
+	}
 
 	// Fake certification for MITM proxy
 	caCertFile := flag.String("cacertfile", "/root/.local/share/mkcert/rootCA.pem", "certificate .pem file for trusted CA")
@@ -71,8 +115,10 @@ func main() {
 		pkg.WithReadDeadline(cfg.Proxy.ReadDeadline),
 		pkg.WithDialTimeout(cfg.Proxy.DialTimeout),
 		pkg.WithHTTPServer(httpServer),
+		pkg.WithAuth(a),
 
 		pkg.WithUsernameParser(parser),
+		pkg.WithLogger(logger),
 
 		pkg.WithCA(*caCertFile, *caKeyFile),
 	)

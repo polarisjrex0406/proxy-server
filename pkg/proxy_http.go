@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 
@@ -50,7 +49,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	request.UserIP = userIP.String()
 
 	err = parseRequest(req.Host, username, password, request, p.config.Parser)
-	fmt.Println(err)
 	if err != nil {
 		// metrics.Errors400BadRequest.Inc()
 		w.WriteHeader(http.StatusBadRequest)
@@ -58,50 +56,51 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// cleanRequestHeaders(req)
+	cleanRequestHeaders(req)
 
-	// purchase, err := p.config.Auth.Authenticate(req.Context(), request.Password)
-	// if err == ErrMissingAuth || err == ErrPurchaseNotFound {
-	// 	// metrics.Errors407AuthRequired.Inc()
-	// 	w.WriteHeader(http.StatusProxyAuthRequired)
-	// 	w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
-	// 	releaseRequest(request)
-	// 	return
-	// } else if err == ErrNotEnoughData {
-	// 	w.WriteHeader(http.StatusPaymentRequired)
-	// 	// metrics.Errors402PaymentRequired.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// } else if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	p.logError(err, request)
-	// 	// metrics.Errors500Internal.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// }
+	purchase, err := p.config.Auth.Authenticate(req.Context(), request.Password)
 
-	// request.PurchaseUUID = purchase.UUID
-	// request.PurchaseType = purchase.Type
+	if err == ErrMissingAuth || err == ErrPurchaseNotFound {
+		// metrics.Errors407AuthRequired.Inc()
+		w.WriteHeader(http.StatusProxyAuthRequired)
+		w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
+		releaseRequest(request)
+		return
+	} else if err == ErrNotEnoughData {
+		w.WriteHeader(http.StatusPaymentRequired)
+		// metrics.Errors402PaymentRequired.Inc()
+		releaseRequest(request)
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		p.logError(err, request)
+		// metrics.Errors500Internal.Inc()
+		releaseRequest(request)
+		return
+	}
 
-	// if err = hasAccess(purchase, request); err == ErrDomainBlocked || err == ErrIPNotAllowed {
-	// 	p.config.Logger.Info(request.UserIP)
-	// 	w.WriteHeader(http.StatusForbidden)
-	// 	// metrics.Errors403Forbidden.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// } else if err == ErrInvalidTargeting {
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	p.logError(err, request)
-	// 	// metrics.Errors400BadRequest.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// } else if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	p.logError(err, request)
-	// 	// metrics.Errors500Internal.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// }
+	request.PurchaseUUID = purchase.UUID
+	request.PurchaseType = purchase.Type
+
+	if err = hasAccess(purchase, request); err == ErrDomainBlocked || err == ErrIPNotAllowed {
+		p.config.Logger.Info(request.UserIP)
+		w.WriteHeader(http.StatusForbidden)
+		// metrics.Errors403Forbidden.Inc()
+		releaseRequest(request)
+		return
+	} else if err == ErrInvalidTargeting {
+		w.WriteHeader(http.StatusBadRequest)
+		p.logError(err, request)
+		// metrics.Errors400BadRequest.Inc()
+		releaseRequest(request)
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		p.logError(err, request)
+		// metrics.Errors500Internal.Inc()
+		releaseRequest(request)
+		return
+	}
 
 	// if purchase.Threads > 0 && p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
 	// 	p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
@@ -134,16 +133,16 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	// 	return
 	// }
 
-	// if req.Method == http.MethodConnect {
-	// 	p.serveHTTPS(purchase, request)
-	// 	return
-	// }
+	if req.Method == http.MethodConnect {
+		p.serveHTTPS(purchase, request)
+		return
+	}
 
-	// p.serveHTTP(purchase, request)
+	p.serveHTTP(purchase, request)
 }
 
-// func (p *Proxy) serveHTTP(purchase *Purchase, request *Request) {
-// }
+func (p *Proxy) serveHTTP(purchase *Purchase, request *Request) {
+}
 
-// func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request) {
-// }
+func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request) {
+}
