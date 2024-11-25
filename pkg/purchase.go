@@ -2,8 +2,6 @@ package pkg
 
 import (
 	"time"
-
-	"github.com/detailyang/domaintree-go"
 )
 
 type PurchaseType string
@@ -13,19 +11,37 @@ const (
 	PurchaseResidential PurchaseType = "residential"
 )
 
-type Purchase struct {
-	UUID              string
-	Type              PurchaseType
-	Threads           int64
-	WhitelistIP       map[string]struct{}
-	BlockedDomains    *domaintree.DomainTree
-	BlacklistHostname int
+type ProxyServiceType string
 
+const (
+	ProxyStatic      = ProxyServiceType("static")
+	ProxyBackconnect = ProxyServiceType("backconnect")
+	ProxyProvider    = ProxyServiceType("provider")
+	ProxySubnet      = ProxyServiceType("subnet")
+	ProxyISPPool     = ProxyServiceType("isp_pool")
+)
+
+type IPVersion string
+
+const (
+	IPVersion4 = IPVersion("ipv4")
+	IPVersion6 = IPVersion("ipv6")
+)
+
+type Purchase struct {
+	// Purchase
 	ID          uint
 	TrafficLeft *int
 	IPCount     *int
 	IPs         map[string]struct{}
-	// Threads     *int
-	Region   string
-	ExpireAt time.Time
+	Threads     *int
+	Region      string
+	ExpireAt    time.Time
+
+	// Product
+	ProxyServiceType ProxyServiceType
+	CountryTargeting bool
+	IPVersion        IPVersion
+	Protocols        []Protocol
+	StickySession    bool
 }

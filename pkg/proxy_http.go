@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/omimic12/proxy-server/constants"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -79,9 +80,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	request.PurchaseUUID = purchase.UUID
-	request.PurchaseType = purchase.Type
-
 	if err = hasAccess(purchase, request); err == ErrDomainBlocked || err == ErrIPNotAllowed {
 		p.config.Logger.Info(request.UserIP)
 		w.WriteHeader(http.StatusForbidden)
@@ -102,36 +100,38 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// if purchase.Threads > 0 && p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
-	// 	p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
-	// 	w.WriteHeader(http.StatusTooManyRequests)
-	// 	// metrics.Errors429TooManyRequests.Inc()
-	// 	releaseRequest(request)
-	// 	return
-	// }
+	if purchase.Threads != nil &&
+		*purchase.Threads > 0 &&
+		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= int64(*purchase.Threads) {
+		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
+		w.WriteHeader(http.StatusTooManyRequests)
+		// metrics.Errors429TooManyRequests.Inc()
+		releaseRequest(request)
+		return
+	}
 
-	// err = p.selectProvider(request)
-	// if err == ErrDomainBlocked {
-	// 	// p.stopTracker(purchase, request)
-	// 	w.WriteHeader(http.StatusForbidden)
-	// 	releaseRequest(request) //nolint:errcheck
-	// 	// metrics.Errors403Forbidden.Inc()
-	// 	return
-	// } else if err == ErrFailedSelectProvider {
-	// 	// p.stopTracker(purchase, request)
-	// 	w.WriteHeader(http.StatusBadGateway)
-	// 	p.logError(errors.Wrap(err, "failed to select provider"), request)
-	// 	// metrics.Errors502Internal.Inc()
-	// 	releaseRequest(request) //nolint:errcheck
-	// 	return
-	// } else if err != nil {
-	// 	// p.stopTracker(purchase, request)
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	p.logError(errors.Wrap(err, "error during provider selection"), request)
-	// 	// metrics.Errors500Internal.Inc()
-	// 	releaseRequest(request) //nolint:errcheck
-	// 	return
-	// }
+	err = p.selectProvider(request)
+	if err == ErrDomainBlocked {
+		// p.stopTracker(purchase, request)
+		w.WriteHeader(http.StatusForbidden)
+		releaseRequest(request) //nolint:errcheck
+		// metrics.Errors403Forbidden.Inc()
+		return
+	} else if err == ErrFailedSelectProvider {
+		// p.stopTracker(purchase, request)
+		w.WriteHeader(http.StatusBadGateway)
+		p.logError(errors.Wrap(err, "failed to select provider"), request)
+		// metrics.Errors502Internal.Inc()
+		releaseRequest(request) //nolint:errcheck
+		return
+	} else if err != nil {
+		// p.stopTracker(purchase, request)
+		w.WriteHeader(http.StatusInternalServerError)
+		p.logError(errors.Wrap(err, "error during provider selection"), request)
+		// metrics.Errors500Internal.Inc()
+		releaseRequest(request) //nolint:errcheck
+		return
+	}
 
 	if req.Method == http.MethodConnect {
 		p.serveHTTPS(purchase, request)

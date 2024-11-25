@@ -9,12 +9,12 @@ var (
 )
 
 func hasAccess(purchase *Purchase, request *Request) error {
-	//if len(purchase.IPs) > 0 {
-	//	_, ok := purchase.IPs[request.UserIP.String()]
-	//	if !ok {
-	//		return ErrIPNotFound
-	//	}
-	//}
+	if len(purchase.IPs) > 0 {
+		_, ok := purchase.IPs[request.UserIP]
+		if !ok {
+			return ErrIPNotFound
+		}
+	}
 
 	if request.PurchaseType == PurchaseStatic && (request.Country != nil || request.Region != nil || request.City != nil) {
 		return ErrInvalidTargeting
@@ -22,20 +22,6 @@ func hasAccess(purchase *Purchase, request *Request) error {
 
 	if request.PurchaseType == PurchaseResidential && request.IP != nil {
 		return ErrInvalidTargeting
-	}
-
-	if len(purchase.WhitelistIP) > 0 {
-		_, whitelisted := purchase.WhitelistIP[request.UserIP]
-		if !whitelisted {
-			return ErrIPNotAllowed
-		}
-	}
-
-	if purchase.BlacklistHostname > 0 {
-		_, found := purchase.BlockedDomains.Lookup(request.Target)
-		if found {
-			return ErrDomainBlocked
-		}
 	}
 
 	return nil

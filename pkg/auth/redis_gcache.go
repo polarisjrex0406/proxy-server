@@ -3,16 +3,15 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/bluele/gcache"
-	"github.com/detailyang/domaintree-go"
 	"github.com/go-redis/redis/v8"
 	"github.com/lib/pq"
 	"github.com/omimic12/proxy-server/pkg"
-	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -74,96 +73,59 @@ func NewRedisGCache(
 
 func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.Purchase, error) {
 	u, err := r.cache.Get(password)
-	fmt.Println(err)
+	fmt.Println("r.cache.Get(password) =", err)
+	fmt.Println("r.cacheRedisFromPrimary(ctx, password) =", r.cacheRedisFromPrimary(ctx, password))
 	if err == gcache.KeyNotFoundError {
-		data, err := r.redisPurchase.Get(ctx, password).Bytes()
+		jsonData, err := r.redisPurchase.Get(ctx, password).Result()
+		fmt.Println("r.redisPurchase.Get(ctx, password).Result() =", err)
 		if err == redis.Nil {
-			err = r.cacheRedisFromPrimary(ctx, password)
-			if err != nil {
-				return nil, pkg.ErrPurchaseNotFound
-			}
+			return nil, pkg.ErrPurchaseNotFound
 		} else if err != nil {
 			return nil, err
 		}
 
-		t := gjson.GetBytes(data, "type").String()
-		if t != "residential" && t != "static" {
-			return nil, fmt.Errorf("invalid purchase type %s", password)
+		cached := make(map[string]interface{})
+		if err := json.Unmarshal([]byte(jsonData), &cached); err != nil {
+			return nil, err // Handle JSON unmarshaling error
 		}
 
-		purchaseUUID := gjson.GetBytes(data, "purchase_uuid").String()
-		if purchaseUUID == "" {
-			return nil, fmt.Errorf("missing purchase_uuid field for the key %s", password)
-		}
-
-		threads := gjson.GetBytes(data, "threads").Int()
-
-		purchase := &pkg.Purchase{
-			UUID:           purchaseUUID,
-			Type:           pkg.PurchaseType(t),
-			Threads:        threads,
-			BlockedDomains: domaintree.NewDomainTree(),
-			WhitelistIP:    make(map[string]struct{}),
-			IPs:            make(map[string]struct{}),
-		}
-
-		if purchase.Type == pkg.PurchaseResidential {
-			value, err := r.redisData.Get(ctx, password).Int64()
-			if err == redis.Nil {
-				return nil, pkg.ErrPurchaseNotFound
-			} else if err != nil {
-				return nil, err
-			}
-
-			if value <= 0 {
-				return nil, pkg.ErrNotEnoughData
-			}
-		}
-
-		bl := gjson.GetBytes(data, "blacklist_hostname")
-		if bl.IsArray() {
-			i := 0
-			bl.ForEach(func(key, value gjson.Result) bool {
-				purchase.BlockedDomains.Add(value.String(), i)
-				i++
-				return true
-			})
-
-			purchase.BlacklistHostname = i
-		}
-
-		wl := gjson.GetBytes(data, "whitelist_ip")
-		if wl.IsArray() {
-			wl.ForEach(func(key, value gjson.Result) bool {
-				v := value.String()
-				purchase.WhitelistIP[v] = struct{}{}
-				return true
-			})
-		}
-
-		ips := gjson.GetBytes(data, "ips")
-		if ips.IsArray() {
-			ips.ForEach(func(key, value gjson.Result) bool {
-				purchase.IPs[value.String()] = struct{}{}
-				return true
-			})
-		}
-
-		ttl, err := r.redisData.TTL(ctx, password).Result()
-		if err != redis.Nil && err != nil {
-			return nil, err
-		}
-
-		if ttl <= 0 || ttl > r.cacheTTL {
-			ttl = r.cacheTTL
-		}
-
-		err = r.cache.SetWithExpire(password, purchase, ttl)
+		cachedData, err := json.MarshalIndent(cached, "", " ")
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println("cachedData =", string(cachedData))
 
-		return purchase, nil
+		// threads := gjson.GetBytes(data, "threads")
+
+		// fmt.Println("gjson.GetBytes(data, 'threads') =", threads)
+
+		// purchase := &pkg.Purchase{
+		// 	IPs: make(map[string]struct{}),
+		// }
+
+		// ips := gjson.GetBytes(data, "ips")
+		// if ips.IsArray() {
+		// 	ips.ForEach(func(key, value gjson.Result) bool {
+		// 		purchase.IPs[value.String()] = struct{}{}
+		// 		return true
+		// 	})
+		// }
+
+		// ttl, err := r.redisData.TTL(ctx, password).Result()
+		// if err != redis.Nil && err != nil {
+		// 	return nil, err
+		// }
+
+		// if ttl <= 0 || ttl > r.cacheTTL {
+		// 	ttl = r.cacheTTL
+		// }
+
+		// err = r.cache.SetWithExpire(password, purchase, ttl)
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		// return purchase, nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -193,17 +155,24 @@ func (r *RedisGCache) cacheRedisFromPrimary(ctx context.Context, password string
 		return err
 	}
 
-	fmt.Println("product_id =", productId)
-	fmt.Println("bandwidth =", bandwidth)
-	fmt.Println("traffic_left =", trafficLeft)
-	fmt.Println("duration =", duration)
-	fmt.Println("ip_count =", ipCount)
-	fmt.Println("ips =", ips)
-	fmt.Println("threads =", threads)
-	fmt.Println("region =", region)
-	fmt.Println("expire_at =", expireAt)
+	cached := make(map[string]interface{})
+	cached["product_id"] = productId
+	cached["bandwidth"] = bandwidth
+	cached["traffic_left"] = trafficLeft
+	cached["duration"] = duration
+	cached["ip_count"] = ipCount
+	cached["ips"] = ips
+	cached["threads"] = threads
+	cached["region"] = region
+	cached["expireAt"] = expireAt
 
-	if err := r.redisPurchase.Set(ctx, password, productId, 1*time.Hour).Err(); err != nil {
+	// Marshal the map to JSON for pretty printing
+	jsonData, err := json.Marshal(cached)
+	if err != nil {
+		return err
+	}
+
+	if err := r.redisPurchase.Set(ctx, password, jsonData, 1*time.Hour).Err(); err != nil {
 		return err
 	}
 
