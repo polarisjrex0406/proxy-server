@@ -100,9 +100,8 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if purchase.Threads != nil &&
-		*purchase.Threads > 0 &&
-		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= int64(*purchase.Threads) {
+	if purchase.Threads > 0 &&
+		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
 		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
 		w.WriteHeader(http.StatusTooManyRequests)
 		// metrics.Errors429TooManyRequests.Inc()

@@ -92,8 +92,6 @@ func main() {
 		redisPurchase,
 		parser,
 		logger,
-
-		db,
 	)
 	if err != nil {
 		panic(err)
