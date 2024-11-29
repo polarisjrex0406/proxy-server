@@ -18,4 +18,6 @@ type Purchase struct {
 	Threads  int64
 	Region   string
 	ExpireAt time.Time
+
+	Type string
 }

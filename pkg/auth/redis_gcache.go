@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/bluele/gcache"
@@ -72,11 +73,31 @@ func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.P
 			return nil, err
 		}
 
+		t := gjson.GetBytes(data, "type").String()
+		if t != "static" && t != "backconnect" && t != "provider" && t != "subnet" && t != "isp_pool" {
+			return nil, fmt.Errorf("invalid purchase type %s", password)
+		}
+
 		threads := gjson.GetBytes(data, "threads").Int()
 
 		purchase := &pkg.Purchase{
 			Threads: threads,
 			IPs:     make(map[string]struct{}),
+			Type:    t,
+		}
+
+		bandwidthLimited := gjson.GetBytes(data, "bandwidth_limited").Bool()
+		if bandwidthLimited {
+			value, err := r.redisData.Get(ctx, password).Int64()
+			if err == redis.Nil {
+				return nil, pkg.ErrPurchaseNotFound
+			} else if err != nil {
+				return nil, err
+			}
+
+			if value <= 0 {
+				return nil, pkg.ErrNotEnoughData
+			}
 		}
 
 		ips := gjson.GetBytes(data, "ips")
