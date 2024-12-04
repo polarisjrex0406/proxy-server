@@ -9,5 +9,5 @@ var (
 
 type Router interface {
 	//Route - find provider which will be used to route the request
-	Route(*Request) (Provider, error)
+	Route(*Purchase, *Request) (Provider, error)
 }

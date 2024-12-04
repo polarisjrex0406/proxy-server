@@ -1,12 +1,10 @@
 package pkg
 
-import (
-	"net"
-)
-
 const (
-	ProviderProxyverse = "proxyverse.io"
-	ProviderStatic     = "static"
+	ProviderStatic      = "static"
+	ProviderDataImpulse = "dataimpulse"
+	ProviderTTProxy     = "ttproxy"
+	ProviderProxyverse  = "proxyverse.io"
 )
 
 type Feature []byte
@@ -42,6 +40,4 @@ type Provider interface {
 	BandwidthLimit() int64
 
 	Credentials(*Request) (hostname string, username, password []byte, encoded []byte, err error)
-
-	Dial([]byte, *Request) (net.Conn, error)
 }

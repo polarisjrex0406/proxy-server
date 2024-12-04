@@ -32,14 +32,14 @@ func NewProxy(options ...Option) *Proxy {
 	return p
 }
 
-func (p *Proxy) selectProvider(request *Request) error {
+func (p *Proxy) selectProvider(purchase *Purchase, request *Request) error {
 	var err error
 
 	if request.SessionID != "" {
 		var ok bool
 		request.Provider, ok = p.config.Sessions.Cached(request)
 		if !ok {
-			request.Provider, err = p.config.Router.Route(request)
+			request.Provider, err = p.config.Router.Route(purchase, request)
 			if err != nil {
 				return err
 			}
@@ -53,7 +53,7 @@ func (p *Proxy) selectProvider(request *Request) error {
 		return nil
 	}
 
-	request.Provider, err = p.config.Router.Route(request)
+	request.Provider, err = p.config.Router.Route(purchase, request)
 	return err
 }
 

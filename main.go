@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	_ "github.com/lib/pq"
@@ -13,6 +14,8 @@ import (
 	"github.com/omimic12/proxy-server/database"
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/omimic12/proxy-server/pkg/auth"
+	"github.com/omimic12/proxy-server/pkg/router"
+	"github.com/omimic12/proxy-server/pkg/settings"
 	"github.com/omimic12/proxy-server/pkg/username"
 	"github.com/pariz/gountries"
 	"go.uber.org/zap"
@@ -97,6 +100,23 @@ func main() {
 		panic(err)
 	}
 
+	providers := []pkg.Provider{}
+	fixedSettings := settings.NewFixed(providers)
+
+	fetchTimeout := time.Second * 5
+	rr, err := router.NewWeightedRoundRobin(
+		fixedSettings,
+		cfg.Proxy.DialTimeout,
+		cfg.Proxy.ReadDeadline,
+		fetchTimeout,
+		cfg.Provider.Static.SyncPeriod,
+		redisProxy,
+		logger,
+	)
+	if err != nil {
+		panic(err)
+	}
+
 	// Fake certification for MITM proxy
 	caCertFile := flag.String("cacertfile", "/root/.local/share/mkcert/rootCA.pem", "certificate .pem file for trusted CA")
 	caKeyFile := flag.String("cakeyfile", "/root/.local/share/mkcert/rootCA-key.pem", "key .pem file for trusted CA")
@@ -114,6 +134,7 @@ func main() {
 		pkg.WithDialTimeout(cfg.Proxy.DialTimeout),
 		pkg.WithHTTPServer(httpServer),
 		pkg.WithAuth(a),
+		pkg.WithRouter(rr),
 
 		pkg.WithUsernameParser(parser),
 		pkg.WithLogger(logger),

@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 
@@ -109,7 +110,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = p.selectProvider(request)
+	err = p.selectProvider(purchase, request)
 	if err == ErrDomainBlocked {
 		// p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusForbidden)
@@ -137,10 +138,23 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	p.serveHTTP(purchase, request)
+	p.serveHTTP(purchase, request, w, req)
 }
 
-func (p *Proxy) serveHTTP(purchase *Purchase, request *Request) {
+func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
+	defer func() {
+		// p.stopTracker(purchase, request)
+		releaseRequest(request)
+	}()
+
+	fmt.Println("request.Provider =", request.Provider)
+
+	hostname, _, _, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
+	if err != nil {
+		return
+	}
+	fmt.Println("hostname =", hostname)
+	fmt.Println("credentials =", string(credentials))
 }
 
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request) {

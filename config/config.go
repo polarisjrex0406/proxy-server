@@ -88,6 +88,10 @@ type Config struct {
 	}
 
 	Provider struct {
+		Static struct {
+			SyncPeriod time.Duration `long:"provider-sync-period" env:"PROVIDER_SYNC_PERIOD" default:"1m"`
+		}
+
 		TTProxy struct {
 			BaseURL          string `long:"provider-ttp-base-url" env:"PROVIDER_TTP_BASEURL" default:"https://api.ttproxy.com/v1/subLicense/"`
 			License          string `long:"provider-ttp-license" env:"PROVIDER_TTP_LICENSE"`
