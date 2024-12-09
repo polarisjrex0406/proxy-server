@@ -85,3 +85,7 @@ func (s *Static) BandwidthLimit() int64 {
 func (s *Static) Credentials(_ *pkg.Request) (string, []byte, []byte, []byte, error) {
 	return s.addr, nil, nil, s.encoded, nil
 }
+
+func (s *Static) PurchasedBy() uint {
+	return 0
+}

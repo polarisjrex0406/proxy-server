@@ -4,7 +4,8 @@ const (
 	ProviderStatic      = "static"
 	ProviderDataImpulse = "dataimpulse"
 	ProviderTTProxy     = "ttproxy"
-	ProviderProxyverse  = "proxyverse.io"
+	ProviderProxyverse  = "proxyverse"
+	ProviderDatabay     = "databay"
 )
 
 type Feature []byte
@@ -40,4 +41,6 @@ type Provider interface {
 	BandwidthLimit() int64
 
 	Credentials(*Request) (hostname string, username, password []byte, encoded []byte, err error)
+
+	PurchasedBy() uint
 }

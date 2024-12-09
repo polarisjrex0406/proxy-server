@@ -10,23 +10,15 @@ import (
 )
 
 const (
-	GateProxyverse = "http://51.81.93.42:9200"
+	GateDatabay = "http://resi-global-gateways.databay.com:7676"
 )
 
 var (
-	byteCountry                 = []byte("country-")
-	byteContinent               = []byte("continent-")
-	byteCity                    = []byte("city-")
-	byteRegion                  = []byte("region-")
-	byteSession                 = []byte("session-")
-	bytesDuration               = []byte("duration-")
-	byteColon                   = []byte(":")
-	byteDash                    = []byte("-")
-	byteRandomCountry           = []byte("rr")
-	byteRandomCountryProxyverse = []byte("worldwide")
+	byteRandomCountryDatabay = []byte("worldwide")
 )
 
-type Proxyverse struct {
+type Databay struct {
+	username []byte
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
@@ -34,8 +26,9 @@ type Proxyverse struct {
 	purchaseId uint
 }
 
-func NewProxyverse(password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *Proxyverse {
-	return &Proxyverse{
+func NewDatabay(username []byte, password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *Databay {
+	return &Databay{
+		username:   username,
 		password:   password,
 		weight:     weight,
 		protocol:   protocol,
@@ -43,46 +36,47 @@ func NewProxyverse(password []byte, weight uint64, protocol pkg.Protocol, purcha
 	}
 }
 
-func (s *Proxyverse) Name() string {
-	return pkg.ProviderProxyverse
+func (s *Databay) Name() string {
+	return pkg.ProviderDatabay
 }
 
-func (s *Proxyverse) Protocol() pkg.Protocol {
+func (s *Databay) Protocol() pkg.Protocol {
 	return s.protocol
 }
 
-func (s *Proxyverse) Weight() uint64 {
+func (s *Databay) Weight() uint64 {
 	return s.weight
 }
 
-func (s *Proxyverse) HasCountry(_ string) bool {
+func (s *Databay) HasCountry(_ string) bool {
 	return true
 }
 
-func (s *Proxyverse) HasRegion(_ string) bool {
+func (s *Databay) HasRegion(_ string) bool {
 	return true
 }
 
-func (s *Proxyverse) HasCity(_ string) bool {
+func (s *Databay) HasCity(_ string) bool {
 	return true
 }
 
-func (s *Proxyverse) HasFeatures(_ ...pkg.Feature) bool {
+func (s *Databay) HasFeatures(_ ...pkg.Feature) bool {
 	return true
 }
 
-func (s *Proxyverse) HasRoutes(levels ...pkg.Route) bool {
+func (s *Databay) HasRoutes(levels ...pkg.Route) bool {
 	return true
 }
 
-func (s *Proxyverse) BandwidthLimit() int64 {
+func (s *Databay) BandwidthLimit() int64 {
 	return -1
 }
 
-func (s *Proxyverse) Credentials(request *pkg.Request) (string, []byte, []byte, []byte, error) {
+func (s *Databay) Credentials(request *pkg.Request) (string, []byte, []byte, []byte, error) {
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
 
+	buf.Write(s.username)
 	err := s.buildUsername(buf, request)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -94,27 +88,27 @@ func (s *Proxyverse) Credentials(request *pkg.Request) (string, []byte, []byte, 
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateProxyverse, nil, nil, cc, nil
+	return GateDatabay, nil, nil, cc, nil
 }
 
-func (s *Proxyverse) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {
+func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {
 	if request.Continent != nil {
 		username.Write(byteContinent)     //nolint:errcheck
 		username.Write(request.Continent) //nolint:errcheck
 	}
 
-	if username.Len() > 0 {
-		username.Write(byteDash) //nolint:errcheck
-	}
-	username.Write(byteCountry) //nolint:errcheck
 	if request.Country != nil {
+		if username.Len() > 0 {
+			username.Write(byteDash) //nolint:errcheck
+		}
+
+		username.Write(byteCountry) //nolint:errcheck
+
 		if bytes.EqualFold(request.Country, byteRandomCountry) {
-			request.Country = byteRandomCountryProxyverse
+			request.Country = byteRandomCountryDatabay
 		}
 
 		username.Write(request.Country) //nolint:errcheck
-	} else {
-		username.Write(byteRandomCountryProxyverse)
 	}
 
 	if request.City != nil {
@@ -156,6 +150,6 @@ func (s *Proxyverse) buildUsername(username *bytebufferpool.ByteBuffer, request 
 	return nil
 }
 
-func (s *Proxyverse) PurchasedBy() uint {
+func (s *Databay) PurchasedBy() uint {
 	return s.purchaseId
 }

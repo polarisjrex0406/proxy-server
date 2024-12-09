@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	GateDataImpulse = "gw.dataimpulse.com:823"
+	GateDataImpulse = "http://gw.dataimpulse.com:823"
 )
 
 type DataImpulse struct {
@@ -16,14 +16,17 @@ type DataImpulse struct {
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
+
+	purchaseId uint
 }
 
-func NewDataImpulse(username []byte, password []byte, weight uint64, protocol pkg.Protocol) *DataImpulse {
+func NewDataImpulse(username []byte, password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *DataImpulse {
 	return &DataImpulse{
-		username: username,
-		password: password,
-		weight:   weight,
-		protocol: protocol,
+		username:   username,
+		password:   password,
+		weight:     weight,
+		protocol:   protocol,
+		purchaseId: purchaseId,
 	}
 }
 
@@ -75,4 +78,8 @@ func (s *DataImpulse) Credentials(request *pkg.Request) (string, []byte, []byte,
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
 	return GateDataImpulse, nil, nil, cc, nil
+}
+
+func (s *DataImpulse) PurchasedBy() uint {
+	return s.purchaseId
 }

@@ -3,8 +3,10 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 
 	"github.com/omimic12/proxy-server/constants"
 	"github.com/pkg/errors"
@@ -147,14 +149,72 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		releaseRequest(request)
 	}()
 
-	fmt.Println("request.Provider =", request.Provider)
-
 	hostname, _, _, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
 	if err != nil {
 		return
 	}
 	fmt.Println("hostname =", hostname)
 	fmt.Println("credentials =", string(credentials))
+
+	// Parse the target URL from the request
+	targetURL := req.URL.String()
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		http.Error(w, "Invalid target URL", http.StatusBadRequest)
+		return
+	}
+
+	// Create a new request to the target URL through the real proxy
+	r, err := http.NewRequest(req.Method, parsedURL.String(), req.Body)
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers from the original request
+	for key, values := range req.Header {
+		for _, value := range values {
+			r.Header.Add(key, value)
+		}
+	}
+	// Set the Authorization header
+	r.Header.Set("Proxy-Authorization", "Basic "+string(credentials))
+
+	// Set up the real proxy
+	proxyURL, err := url.Parse(hostname)
+	if err != nil {
+		http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
+		return
+	}
+
+	// Create a client with the proxy
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+	}
+
+	// Send the request to the real proxy
+	resp, err := client.Do(r)
+	if err != nil {
+		http.Error(w, "Failed to reach real proxy", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy the response headers and status code
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	// Write the response body
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request) {

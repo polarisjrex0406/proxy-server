@@ -81,6 +81,7 @@ func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.P
 		threads := gjson.GetBytes(data, "threads").Int()
 
 		purchase := &pkg.Purchase{
+			ID:      uint(gjson.GetBytes(data, "id").Int()),
 			Threads: threads,
 			IPs:     make(map[string]struct{}),
 			Type:    t,
