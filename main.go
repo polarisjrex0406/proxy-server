@@ -159,8 +159,6 @@ func main() {
 
 func newHttp(conf *config.Config) *http.Server {
 	srv := &http.Server{
-		Addr: fmt.Sprintf(":%d", conf.Proxy.PortHTTP),
-
 		ReadTimeout:  conf.HTTP.ReadTimeout,  // not applied to Hijacked connections
 		WriteTimeout: conf.HTTP.WriteTimeout, // not applied to Hijacked connections
 		IdleTimeout:  conf.HTTP.IdleTimeout,

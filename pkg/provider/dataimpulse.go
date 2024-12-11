@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	GateDataImpulse = "http://gw.dataimpulse.com:823"
+	GateDataImpulse = "gw.dataimpulse.com:823"
 )
 
 type DataImpulse struct {
@@ -77,7 +77,7 @@ func (s *DataImpulse) Credentials(request *pkg.Request) (string, []byte, []byte,
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateDataImpulse, nil, nil, cc, nil
+	return GateDataImpulse, s.username, s.password, cc, nil
 }
 
 func (s *DataImpulse) PurchasedBy() uint {

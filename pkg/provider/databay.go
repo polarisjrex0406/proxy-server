@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	GateDatabay = "http://resi-global-gateways.databay.com:7676"
+	GateDatabay = "resi-global-gateways.databay.com:7676"
 )
 
 var (
@@ -88,7 +88,7 @@ func (s *Databay) Credentials(request *pkg.Request) (string, []byte, []byte, []b
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateDatabay, nil, nil, cc, nil
+	return GateDatabay, s.username, s.password, cc, nil
 }
 
 func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {

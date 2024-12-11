@@ -185,29 +185,6 @@ func (p *mitmProxy) proxyConnect(w http.ResponseWriter, proxyReq *http.Request) 
 	}
 }
 
-// changeRequestToTarget modifies req to be re-routed to the given target;
-// the target should be taken from the Host of the original tunnel (CONNECT)
-// request.
-func changeRequestToTarget(req *http.Request, targetHost string) {
-	targetUrl := addrToUrl(targetHost)
-	targetUrl.Path = req.URL.Path
-	targetUrl.RawQuery = req.URL.RawQuery
-	req.URL = targetUrl
-	// Make sure this is unset for sending the request through a client
-	req.RequestURI = ""
-}
-
-func addrToUrl(addr string) *url.URL {
-	if !strings.HasPrefix(addr, "https") {
-		addr = "https://" + addr
-	}
-	u, err := url.Parse(addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return u
-}
-
 func getProxySettings(providerName string) (string, string, string, string) {
 	cfg, err := config.GetConfig()
 	if err != nil {

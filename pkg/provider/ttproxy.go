@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	GateTTProxy = "http://dynamic.ttproxy.com:10001"
+	GateTTProxy = "dynamic.ttproxy.com:10001"
 )
 
 type TTProxy struct {
@@ -77,7 +77,7 @@ func (s *TTProxy) Credentials(request *pkg.Request) (string, []byte, []byte, []b
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateTTProxy, nil, nil, cc, nil
+	return GateTTProxy, s.username, s.password, cc, nil
 }
 
 func (s *TTProxy) PurchasedBy() uint {

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	GateProxyverse = "http://51.81.93.42:9200"
+	GateProxyverse = "51.81.93.42:9200"
 )
 
 var (
@@ -88,13 +88,14 @@ func (s *Proxyverse) Credentials(request *pkg.Request) (string, []byte, []byte, 
 		return "", nil, nil, nil, err
 	}
 
+	username := buf.Bytes()
 	buf.Write(byteColon)  //nolint:errcheck
 	buf.Write(s.password) //nolint:errcheck
 
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateProxyverse, nil, nil, cc, nil
+	return GateProxyverse, username, s.password, cc, nil
 }
 
 func (s *Proxyverse) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {

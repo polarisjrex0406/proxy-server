@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"crypto/x509"
+	"log"
 	"net/http"
 	"time"
 
@@ -111,6 +112,10 @@ func WithLogger(logger *zap.Logger) Option {
 func WithCA(caCertFile, caKeyFile string) Option {
 	return func(options *Options) {
 		caCert, caKey, err := loadX509KeyPair(caCertFile, caKeyFile)
+		if err != nil {
+			log.Fatal("Error loading CA certificate/key:", err)
+		}
+		log.Printf("loaded CA certificate and key; IsCA=%v\n", caCert.IsCA)
 		if err == nil {
 			options.CACert = caCert
 			options.CAKey = caKey
