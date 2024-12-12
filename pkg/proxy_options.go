@@ -16,6 +16,7 @@ type Options struct {
 	ReadDeadline      time.Duration
 	DialTimeout       time.Duration
 	HTTPServer        *http.Server
+	HTTPsServer       *http.Server
 	Auth              Auth
 	Sessions          Sessions
 	Router            Router
@@ -45,6 +46,12 @@ func WithAccountBytes(bytes int64) Option {
 func WithHTTPServer(srv *http.Server) Option {
 	return func(options *Options) {
 		options.HTTPServer = srv
+	}
+}
+
+func WithHTTPsServer(srv *http.Server) Option {
+	return func(options *Options) {
+		options.HTTPsServer = srv
 	}
 }
 

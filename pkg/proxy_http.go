@@ -30,6 +30,12 @@ func (p *Proxy) ListenHTTP(ctx context.Context, port int) error {
 	return p.config.HTTPServer.Shutdown(ctx)
 }
 
+func (p *Proxy) handlerHTTPS(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("handlerHTTPS Started:")
+	fmt.Println(req.Header)
+	fmt.Println("handlerHTTPS Ended:")
+}
+
 func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodConnect {
 		p.serveHTTPS(w, req)
@@ -37,7 +43,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var err error
-	username, password, err := extractCredentials(req)
+	username, password, err := extractCredentials(req, req)
 	if err != nil {
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
@@ -181,8 +187,10 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		r.Header.Set(constants.HeaderProxyAuthorization, "Basic "+zerocopy.String(credentials))
 	}
 
+	proxyStr := fmt.Sprintf("http://%s", hostname)
+
 	// Set up the real proxy
-	proxyURL, err := url.Parse(hostname)
+	proxyURL, err := url.Parse(proxyStr)
 	if err != nil {
 		http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
 		return
@@ -273,7 +281,6 @@ func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
 	// Create a buffered reader for the client connection; this is required to
 	// use http package functions with this connection.
 	connReader := bufio.NewReader(tlsConn)
-	// connWriter := bufio.NewWriter(tlsConn)
 
 	// Run the proxy in a loop until the client closes the connection.
 	for {
@@ -289,7 +296,7 @@ func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
 			log.Printf("incoming request:\n%s\n", string(b))
 		}
 
-		username, password, err := extractCredentials(r)
+		username, password, err := extractCredentials(req, r)
 		if err != nil {
 			w.WriteHeader(http.StatusProxyAuthRequired)
 			w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
@@ -329,7 +336,7 @@ func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
 
 		cleanRequestHeaders(req)
 
-		purchase, err := p.config.Auth.Authenticate(r.Context(), request.Password)
+		purchase, err := p.config.Auth.Authenticate(req.Context(), request.Password)
 
 		if err == ErrMissingAuth || err == ErrPurchaseNotFound {
 			// metrics.Errors407AuthRequired.Inc()
@@ -444,7 +451,6 @@ func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
 		defer resp.Body.Close()
 
 		// Send the target server's response back to the client.
-		fmt.Printf("Response Protocol: %v\n", resp.Proto)
 		resp.ProtoMajor = 1
 		resp.ProtoMinor = 1
 		if err := resp.Write(tlsConn); err != nil {

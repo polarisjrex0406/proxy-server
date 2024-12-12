@@ -11,11 +11,13 @@ import (
 	"github.com/omimic12/proxy-server/constants"
 )
 
-func extractCredentials(req *http.Request) ([]byte, string, error) {
-	authStr := req.Header.Get(constants.HeaderProxyAuthorization)
+func extractCredentials(originReq *http.Request, bufferedReq *http.Request) ([]byte, string, error) {
+	authStr := originReq.Header.Get(constants.HeaderProxyAuthorization)
 
 	if authStr == "" {
-		return nil, "", ErrMissingAuth
+		if authStr = bufferedReq.Header.Get(constants.HeaderProxyAuthorization); authStr == "" {
+			return nil, "", ErrMissingAuth
+		}
 	}
 
 	username, password, ok := parseBasicAuth([]byte(authStr))
