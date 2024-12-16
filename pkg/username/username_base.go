@@ -20,9 +20,7 @@ var (
 )
 
 var (
-	byteUsernameRegion   = []byte("region")
 	byteUsernameCountry  = []byte("country")
-	byteUsernameCity     = []byte("city")
 	byteUsernameDuration = []byte("duration")
 	byteUsernameSession  = []byte("session")
 	byteUsernameIP       = []byte("ip")
@@ -123,11 +121,7 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 		}
 	}
 
-	// if req.Country == nil && req.Region == nil && req.City == nil && req.IP == nil {
-	// 	return ErrInvalidTargeting
-	// }
-
-	if req.Country != nil && !bytes.EqualFold(req.Country, byteUsernameRandom) {
+	if req.Country != nil {
 		_, err = s.location.FindCountryByAlpha(zerocopy.String(req.Country))
 		if err != nil {
 			if strings.EqualFold(zerocopy.String(req.Country), strUsernameCountryUK) { //small hack to accept both US and GB

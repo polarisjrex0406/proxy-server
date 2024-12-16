@@ -16,6 +16,7 @@ import (
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/omimic12/proxy-server/pkg/auth"
 	"github.com/omimic12/proxy-server/pkg/router"
+	"github.com/omimic12/proxy-server/pkg/sessions"
 	"github.com/omimic12/proxy-server/pkg/settings"
 	"github.com/omimic12/proxy-server/pkg/username"
 	"github.com/pariz/gountries"
@@ -120,6 +121,9 @@ func main() {
 		panic(err)
 	}
 
+	sessionStorage := sessions.NewGCache(cfg.Session.CacheSize, logger)
+	defer sessionStorage.Close() //nolint:errcheck
+
 	httpServer := newHttp(cfg)
 	httpsServer := newHttp(cfg)
 
@@ -135,7 +139,7 @@ func main() {
 		pkg.WithHTTPsServer(httpsServer),
 		pkg.WithAuth(a),
 		pkg.WithRouter(rr),
-
+		pkg.WithSessions(sessionStorage),
 		pkg.WithUsernameParser(parser),
 		pkg.WithLogger(logger),
 	)

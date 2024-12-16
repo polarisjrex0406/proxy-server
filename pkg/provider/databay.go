@@ -15,7 +15,9 @@ const (
 )
 
 var (
-	byteCountryCodeDatabay = []byte("countryCode-")
+	byteCountryCodeDatabay        = []byte("countryCode-")
+	byteSessionIdDatabay          = []byte("sessionId-")
+	byteSessionMaxDurationDatabay = []byte("sessionMaxDuration-")
 )
 
 type Databay struct {
@@ -111,7 +113,7 @@ func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pk
 			username.Write(byteDash) //nolint:errcheck
 		}
 
-		username.Write(byteSession)             //nolint:errcheck
+		username.Write(byteSessionIdDatabay)    //nolint:errcheck
 		username.WriteString(request.SessionID) //nolint:errcheck
 	}
 
@@ -120,8 +122,8 @@ func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pk
 			username.Write(byteDash) //nolint:errcheck
 		}
 
-		username.Write(bytesDuration)                                              //nolint:errcheck
-		username.WriteString(strconv.Itoa(int(request.SessionDuration.Seconds()))) //nolint:errcheck
+		username.Write(byteSessionMaxDurationDatabay)                              //nolint:errcheck
+		username.WriteString(strconv.Itoa(int(request.SessionDuration.Minutes()))) //nolint:errcheck
 	}
 
 	return nil
