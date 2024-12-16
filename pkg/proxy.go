@@ -29,9 +29,6 @@ func NewProxy(options ...Option) *Proxy {
 	if p.config.HTTPServer != nil {
 		p.config.HTTPServer.Handler = http.HandlerFunc(p.handlerHTTP)
 	}
-	if p.config.HTTPsServer != nil {
-		p.config.HTTPsServer.Handler = http.HandlerFunc(p.handlerHTTPS)
-	}
 	return p
 }
 

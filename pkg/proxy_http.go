@@ -30,18 +30,7 @@ func (p *Proxy) ListenHTTP(ctx context.Context, port int) error {
 	return p.config.HTTPServer.Shutdown(ctx)
 }
 
-func (p *Proxy) handlerHTTPS(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("handlerHTTPS Started:")
-	fmt.Println(req.Header)
-	fmt.Println("handlerHTTPS Ended:")
-}
-
 func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodConnect {
-		p.serveHTTPS(w, req)
-		return
-	}
-
 	var err error
 	username, password, err := extractCredentials(req, req)
 	if err != nil {
@@ -153,6 +142,11 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if req.Method == http.MethodConnect {
+		p.serveHTTPS(purchase, request, w, req)
+		return
+	}
+
 	p.serveHTTP(purchase, request, w, req)
 }
 
@@ -227,7 +221,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	}
 }
 
-func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
 	log.Printf("CONNECT requested to %v (from %v)", req.Host, req.RemoteAddr)
 
 	// "Hijack" the client connection to get a TCP (or TLS) socket we can read
@@ -294,119 +288,6 @@ func (p *Proxy) serveHTTPS(w http.ResponseWriter, req *http.Request) {
 		// We can dump the request; log it, modify it...
 		if b, err := httputil.DumpRequest(r, false); err == nil {
 			log.Printf("incoming request:\n%s\n", string(b))
-		}
-
-		username, password, err := extractCredentials(req, r)
-		if err != nil {
-			w.WriteHeader(http.StatusProxyAuthRequired)
-			w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
-			return
-		}
-
-		request := acquireRequest()
-		request.Protocol = HTTP
-		request.Done = make(chan struct{}, 1)
-		host, _, err := net.SplitHostPort(req.RemoteAddr)
-		if err != nil {
-			// metrics.Errors400BadRequest.Inc()
-			// w.WriteHeader(http.StatusBadRequest)
-			if _, err := tlsConn.Write([]byte("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")); err != nil {
-				log.Fatal("error writing status to client:", err)
-			}
-			releaseRequest(request)
-			return
-		}
-
-		userIP := net.ParseIP(host)
-		if userIP == nil {
-			// metrics.Errors400BadRequest.Inc()
-			w.WriteHeader(http.StatusBadRequest)
-			releaseRequest(request)
-			return
-		}
-		request.UserIP = userIP.String()
-
-		err = parseRequest(req.Host, username, password, request, p.config.Parser)
-		if err != nil {
-			// metrics.Errors400BadRequest.Inc()
-			w.WriteHeader(http.StatusBadRequest)
-			releaseRequest(request)
-			return
-		}
-
-		cleanRequestHeaders(req)
-
-		purchase, err := p.config.Auth.Authenticate(req.Context(), request.Password)
-
-		if err == ErrMissingAuth || err == ErrPurchaseNotFound {
-			// metrics.Errors407AuthRequired.Inc()
-			w.WriteHeader(http.StatusProxyAuthRequired)
-			w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
-			releaseRequest(request)
-			return
-		} else if err == ErrNotEnoughData {
-			w.WriteHeader(http.StatusPaymentRequired)
-			// metrics.Errors402PaymentRequired.Inc()
-			releaseRequest(request)
-			return
-		} else if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			p.logError(err, request)
-			// metrics.Errors500Internal.Inc()
-			releaseRequest(request)
-			return
-		}
-
-		if err = hasAccess(purchase, request); err == ErrDomainBlocked || err == ErrIPNotAllowed {
-			p.config.Logger.Info(request.UserIP)
-			w.WriteHeader(http.StatusForbidden)
-			// metrics.Errors403Forbidden.Inc()
-			releaseRequest(request)
-			return
-		} else if err == ErrInvalidTargeting {
-			w.WriteHeader(http.StatusBadRequest)
-			p.logError(err, request)
-			// metrics.Errors400BadRequest.Inc()
-			releaseRequest(request)
-			return
-		} else if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			p.logError(err, request)
-			// metrics.Errors500Internal.Inc()
-			releaseRequest(request)
-			return
-		}
-
-		if purchase.Threads > 0 &&
-			p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
-			p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
-			w.WriteHeader(http.StatusTooManyRequests)
-			// metrics.Errors429TooManyRequests.Inc()
-			releaseRequest(request)
-			return
-		}
-
-		err = p.selectProvider(purchase, request)
-		if err == ErrDomainBlocked {
-			// p.stopTracker(purchase, request)
-			w.WriteHeader(http.StatusForbidden)
-			releaseRequest(request) //nolint:errcheck
-			// metrics.Errors403Forbidden.Inc()
-			return
-		} else if err == ErrFailedSelectProvider {
-			// p.stopTracker(purchase, request)
-			w.WriteHeader(http.StatusBadGateway)
-			p.logError(errors.Wrap(err, "failed to select provider"), request)
-			// metrics.Errors502Internal.Inc()
-			releaseRequest(request) //nolint:errcheck
-			return
-		} else if err != nil {
-			// p.stopTracker(purchase, request)
-			w.WriteHeader(http.StatusInternalServerError)
-			p.logError(errors.Wrap(err, "error during provider selection"), request)
-			// metrics.Errors500Internal.Inc()
-			releaseRequest(request) //nolint:errcheck
-			return
 		}
 
 		// Handle Basic Authentication

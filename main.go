@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"time"
 
@@ -21,8 +19,6 @@ import (
 	"github.com/omimic12/proxy-server/pkg/username"
 	"github.com/pariz/gountries"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/acme"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
@@ -127,7 +123,6 @@ func main() {
 	flag.Parse()
 
 	httpServer := newHttp(cfg)
-	httpsServer := newHttp(cfg)
 
 	ch := make(chan map[string]int64)
 
@@ -138,7 +133,6 @@ func main() {
 		pkg.WithReadDeadline(cfg.Proxy.ReadDeadline),
 		pkg.WithDialTimeout(cfg.Proxy.DialTimeout),
 		pkg.WithHTTPServer(httpServer),
-		pkg.WithHTTPsServer(httpsServer),
 		pkg.WithAuth(a),
 		pkg.WithRouter(rr),
 
@@ -147,35 +141,6 @@ func main() {
 
 		pkg.WithCA(*caCertFile, *caKeyFile),
 	)
-
-	m := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist("genempriezhr.online"), // Replace with your domain.
-		Cache:      autocert.DirCache("./certs"),
-	}
-	tlsConfig := &tls.Config{
-		GetCertificate: m.GetCertificate,
-		ServerName:     "genempriezhr.online",
-		NextProtos: []string{
-			"http/1.1", acme.ALPNProto,
-		},
-		InsecureSkipVerify: false,
-	}
-	// Let's Encrypt tls-alpn-01 only works on port 443.
-	ln, err := net.Listen("tcp4", "0.0.0.0:443") /* #nosec G102 */
-	if err != nil {
-		logger.Panic("failed to start listener on port 443", zap.Error(err))
-	}
-	lnTls := tls.NewListener(ln, tlsConfig)
-	go func() {
-		logger.Info("Proxy: HTTPS Starting :443")
-		defer logger.Info("Proxy: HTTPS Stopped")
-		if err := httpsServer.Serve(lnTls); err != nil {
-			logger.Error("failed to listen ACME TLS", zap.Error(err))
-		}
-		err = httpsServer.Shutdown(ctx)
-		fmt.Println("httpsServer.Shutdown() =", err)
-	}()
 
 	if cfg.Proxy.PortHTTP > 0 {
 		go func() {
