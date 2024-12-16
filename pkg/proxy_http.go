@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/omimic12/proxy-server/constants"
 	"github.com/omimic12/proxy-server/pkg/zerocopy"
@@ -159,15 +158,14 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 
 	hostname, _, _, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
 	if err != nil {
+		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
-	fmt.Println("hostname =", hostname)
-	fmt.Println("credentials =", string(credentials))
 
 	// Create a new request to the target URL through the real proxy
 	r, err := http.NewRequest(req.Method, req.URL.String(), req.Body)
 	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
 
@@ -187,7 +185,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	// Set up the real proxy
 	proxyURL, err := url.Parse(proxyStr)
 	if err != nil {
-		http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
 
@@ -201,8 +199,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	// Send the request to the real proxy
 	resp, err := client.Do(r)
 	if err != nil {
-		fmt.Println("err =", err)
-		http.Error(w, "Failed to reach real proxy", http.StatusBadGateway)
+		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
 	defer resp.Body.Close()
@@ -217,18 +214,16 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 
 	// Write the response body
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
 }
 
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
-	log.Printf("CONNECT requested to %v (from %v)", req.Host, req.RemoteAddr)
-
 	// dialDuration := time.Now()
 	upstream, err := request.Provider.Dial([]byte(req.RequestURI), request)
 	if err != nil {
-		// ctx.SetStatusCode(fasthttp.StatusGatewayTimeout)
+		w.WriteHeader(http.StatusGatewayTimeout)
 		// metrics.Errors504GatewayTimeout.Inc()
 		// p.stopTracker(purchase, request)
 		p.logError(err, request)
@@ -242,13 +237,6 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 	// metrics.ConnectionsHTTPS.Inc()
 
 	// request.Inc(headerSize(ctx))
-
-	// var noResponse bool
-	// if !ctx.Request.Header.IsHTTP11() {
-	// 	noResponse = true
-	// }
-
-	// ctx.HijackSetNoResponse(noResponse)
 
 	// "Hijack" the client connection to get a TCP (or TLS) socket we can read
 	// and write arbitrary data to/from.
@@ -271,49 +259,5 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 		return
 	}
 	_ = p.tunnel(purchase, request, upstream, client)
-
-	// ctx.Hijack(func(client net.Conn) {
-	// 	if noResponse {
-	// 		//http1.0 clients
-	// 		_, err := client.Write(okHTTP11Response)
-	// 		if err != nil {
-	// 			p.stopTracker(purchase, request)
-	// 			_ = upstream.Close() //nolint:errcheck
-	// 			_ = client.Close()   //nolint:errcheck
-	// 			releaseRequest(request)
-	// 			return
-	// 		}
-	// 	}
-
-	// 	_ = p.tunnel(purchase, request, upstream, client) //nolint:errcheck
-
-	// 	releaseRequest(request)
-	// })
-
-	// ctx.SetStatusCode(fasthttp.StatusOK)
-
-	// ctx.Success("", nil)
-}
-
-// changeRequestToTarget modifies req to be re-routed to the given target;
-// the target should be taken from the Host of the original tunnel (CONNECT)
-// request.
-func changeRequestToTarget(req *http.Request, targetHost string) {
-	targetUrl := addrToUrl(targetHost)
-	targetUrl.Path = req.URL.Path
-	targetUrl.RawQuery = req.URL.RawQuery
-	req.URL = targetUrl
-	// Make sure this is unset for sending the request through a client
-	req.RequestURI = ""
-}
-
-func addrToUrl(addr string) *url.URL {
-	if !strings.HasPrefix(addr, "https") {
-		addr = "https://" + addr
-	}
-	u, err := url.Parse(addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return u
+	releaseRequest(request)
 }

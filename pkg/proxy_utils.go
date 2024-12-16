@@ -3,10 +3,8 @@ package pkg
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -33,7 +31,6 @@ LOOP:
 
 		if p.config.ReadDeadline > 0 {
 			if err = src.SetReadDeadline(time.Now().Add(p.config.ReadDeadline)); err != nil {
-				fmt.Println("err =", err)
 				break LOOP
 			}
 		}
@@ -53,12 +50,10 @@ LOOP:
 			}
 			if ew != nil {
 				err = ew
-				fmt.Println("ew =", ew)
 				break LOOP
 			}
 			if nw != nr {
 				err = io.ErrShortWrite
-				fmt.Println("nw & nr =", err)
 				break LOOP
 			}
 		}
@@ -66,7 +61,6 @@ LOOP:
 			if er != io.EOF {
 				err = er
 			}
-			fmt.Printf("er = %v from %v\n", er, src.RemoteAddr().String())
 			break LOOP
 		}
 	}
@@ -76,7 +70,6 @@ LOOP:
 	}
 
 	_ = dst.Close()
-	fmt.Println("Connection closed:", dst.RemoteAddr().String())
 	return
 }
 
@@ -93,36 +86,11 @@ func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Co
 
 	if err := g.Wait(); err != ErrConnectionClosed {
 		// p.stopTracker(purchase, request)
-		fmt.Println("err =", err)
-		fmt.Println("p.stopTracker(purchase, request)")
 	} else {
 		// p.deleteTracker(purchase, request)
-		fmt.Println("p.deleteTracker(purchase, request)")
 	}
 
 	return nil
-}
-
-type countConn struct {
-	net.Conn
-	written int64
-	read    int64
-}
-
-func (c *countConn) Read(b []byte) (n int, err error) {
-	n, err = c.Conn.Read(b)
-	atomic.AddInt64(&c.read, int64(n))
-	return n, err
-}
-
-func (c *countConn) Write(b []byte) (n int, err error) {
-	n, err = c.Conn.Write(b)
-	atomic.AddInt64(&c.written, int64(n))
-	return n, err
-}
-
-func (c *countConn) Transferred() int64 {
-	return atomic.LoadInt64(&c.read) + atomic.LoadInt64(&c.written)
 }
 
 func hasAccess(purchase *Purchase, request *Request) error {
@@ -142,29 +110,4 @@ func hasAccess(purchase *Purchase, request *Request) error {
 	}
 
 	return nil
-}
-
-func dialUpstreamHTTP(request *Request, timeout time.Duration) (*countConn, error) {
-	hostname, _, _, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println("dialUpstreamHTTP() called:")
-	fmt.Println("hostname =", hostname)
-	fmt.Println("credentials =", credentials)
-	fmt.Println("dialUpstreamHTTP() ended:")
-
-	// if len(credentials) > 0 {
-	// 	ctx.Request.Header.Set(fasthttp.HeaderProxyAuthorization, "Basic "+zerocopy.String(credentials))
-	// }
-	// ctx.Request.SetRequestURIBytes(ctx.RequestURI())
-
-	// conn, err := fasthttp.DialTimeout(hostname, timeout)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// return &countConn{conn, 0, 0}, nil
-	return nil, nil
 }

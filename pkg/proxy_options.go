@@ -1,8 +1,6 @@
 package pkg
 
 import (
-	"crypto/x509"
-	"log"
 	"net/http"
 	"time"
 
@@ -24,9 +22,6 @@ type Options struct {
 	Accountant        Accountant
 	Parser            UsernameParser
 	Logger            *zap.Logger
-	// Additional
-	CACert *x509.Certificate
-	CAKey  any
 }
 
 type Option func(*Options)
@@ -112,20 +107,5 @@ func WithUsernameParser(parser UsernameParser) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return func(options *Options) {
 		options.Logger = logger
-	}
-}
-
-// Additional
-func WithCA(caCertFile, caKeyFile string) Option {
-	return func(options *Options) {
-		caCert, caKey, err := loadX509KeyPair(caCertFile, caKeyFile)
-		if err != nil {
-			log.Fatal("Error loading CA certificate/key:", err)
-		}
-		log.Printf("loaded CA certificate and key; IsCA=%v\n", caCert.IsCA)
-		if err == nil {
-			options.CACert = caCert
-			options.CAKey = caKey
-		}
 	}
 }
