@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bytes"
 	"encoding/base64"
 	"net"
 	"strconv"
@@ -95,41 +94,13 @@ func (s *Databay) Credentials(request *pkg.Request) (string, []byte, []byte, []b
 }
 
 func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {
-	if request.Continent != nil {
-		username.Write(byteContinent)     //nolint:errcheck
-		username.Write(request.Continent) //nolint:errcheck
-	}
-
 	if request.Country != nil {
 		if username.Len() > 0 {
 			username.Write(byteDash) //nolint:errcheck
 		}
 
-		username.Write(byteCountry) //nolint:errcheck
-
-		if bytes.EqualFold(request.Country, byteRandomCountry) {
-			request.Country = byteRandomCountryDatabay
-		}
-
+		username.Write(byteCountry)     //nolint:errcheck
 		username.Write(request.Country) //nolint:errcheck
-	}
-
-	if request.City != nil {
-		if username.Len() > 0 {
-			username.Write(byteDash) //nolint:errcheck
-		}
-
-		username.Write(byteCity)     //nolint:errcheck
-		username.Write(request.City) //nolint:errcheck
-	}
-
-	if request.Region != nil {
-		if username.Len() > 0 {
-			username.Write(byteDash) //nolint:errcheck
-		}
-
-		username.Write(byteRegion)     //nolint:errcheck
-		username.Write(request.Region) //nolint:errcheck
 	}
 
 	if request.SessionID != "" {

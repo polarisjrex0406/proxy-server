@@ -133,15 +133,9 @@ func NewWeightedRoundRobin(
 
 func (r *WeightedRoundRobin) Route(purchase *pkg.Purchase, request *pkg.Request) (pkg.Provider, error) {
 	return r.selectIP(purchase, request)
-
-	// if request.IP != nil {
-	// 	return r.selectIP(request)
-	// }
-
-	// return r.selectProvider(request)
 }
 
-func (r *WeightedRoundRobin) selectIP(purchase *pkg.Purchase, request *pkg.Request) (pkg.Provider, error) {
+func (r *WeightedRoundRobin) selectIP(purchase *pkg.Purchase, _ *pkg.Request) (pkg.Provider, error) {
 	if purchase.Type == "static" {
 		i := 0
 		if len(r.ipStaticSlice) > 0 {
@@ -191,75 +185,6 @@ func (r *WeightedRoundRobin) selectIP(purchase *pkg.Purchase, request *pkg.Reque
 	}
 	return nil, pkg.ErrPurchaseNotFound
 }
-
-// func (r *WeightedRoundRobin) selectProvider(request *pkg.Request) (pkg.Provider, error) {
-// 	if len(r.providers) == 1 {
-// 		for _, p := range r.providers {
-// 			return p, nil
-// 		}
-// 	}
-
-// 	var max = r.roundRobin.Size()
-// 	if max > 1 {
-// 		max = max * 2
-// 	}
-
-// 	//var exclude = make([]pkg.Provider, 0, max)
-// 	var i, blocked int
-// 	for {
-// 		if i >= max {
-// 			if blocked >= i {
-// 				return nil, pkg.ErrDomainBlocked
-// 			}
-
-// 			return nil, pkg.ErrFailedSelectProvider
-// 		}
-
-// 		//select p
-// 		p, err := r.roundRobin.GetProvider()
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		if !p.HasFeatures(request.Features...) {
-// 			//exclude = append(exclude, p)
-// 			i++
-// 			continue
-// 		}
-
-// 		if !p.HasRoutes(request.Routes...) {
-// 			//exclude = append(exclude, p)
-// 			i++
-// 			continue
-// 		}
-
-// 		if request.Country != nil {
-// 			if !p.HasCountry(zerocopy.String(request.Country)) {
-// 				//exclude = append(exclude, p)
-// 				i++
-// 				continue
-// 			}
-// 		}
-
-// 		if request.Region != nil {
-// 			if !p.HasRegion(zerocopy.String(request.Region)) {
-// 				//exclude = append(exclude, p)
-// 				i++
-// 				continue
-// 			}
-// 		}
-
-// 		if request.City != nil {
-// 			if !p.HasCity(zerocopy.String(request.City)) {
-// 				//exclude = append(exclude, p)
-// 				i++
-// 				continue
-// 			}
-// 		}
-
-// 		return p, nil
-// 	}
-// }
 
 func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg.Provider, error) {
 	var p pkg.Provider

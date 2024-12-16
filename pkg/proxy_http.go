@@ -90,7 +90,10 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = hasAccess(purchase, request); err == ErrDomainBlocked || err == ErrIPNotAllowed {
+	request.PurchaseType = PurchaseType(purchase.Type)
+
+	err = hasAccess(purchase, request)
+	if err == ErrDomainBlocked || err == ErrIPNotAllowed {
 		p.config.Logger.Info(request.UserIP)
 		w.WriteHeader(http.StatusForbidden)
 		// metrics.Errors403Forbidden.Inc()
@@ -112,7 +115,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if purchase.Threads > 0 &&
 		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
-		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
+		// p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
 		w.WriteHeader(http.StatusTooManyRequests)
 		// metrics.Errors429TooManyRequests.Inc()
 		releaseRequest(request)
@@ -150,17 +153,18 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	p.serveHTTP(purchase, request, w, req)
 }
 
-func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) serveHTTP(_ *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		// p.stopTracker(purchase, request)
 		releaseRequest(request)
 	}()
 
-	hostname, _, _, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
+	hostname, username, password, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
+	fmt.Printf("username = %s\tpassword = %s\n", string(username), string(password))
 
 	// Create a new request to the target URL through the real proxy
 	r, err := http.NewRequest(req.Method, req.URL.String(), req.Body)
@@ -220,6 +224,12 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 }
 
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
+	_, username, password, _, err := request.Provider.Credentials(request) // FIXME looks awkward
+	if err != nil {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		return
+	}
+	fmt.Printf("username = %s\tpassword = %s\n", string(username), string(password))
 	// dialDuration := time.Now()
 	upstream, err := request.Provider.Dial([]byte(req.RequestURI), request)
 	if err != nil {

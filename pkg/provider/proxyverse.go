@@ -1,10 +1,10 @@
 package provider
 
 import (
-	"bytes"
 	"encoding/base64"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/valyala/bytebufferpool"
@@ -16,14 +16,10 @@ const (
 
 var (
 	byteCountry                 = []byte("country-")
-	byteContinent               = []byte("continent-")
-	byteCity                    = []byte("city-")
-	byteRegion                  = []byte("region-")
 	byteSession                 = []byte("session-")
 	bytesDuration               = []byte("duration-")
 	byteColon                   = []byte(":")
 	byteDash                    = []byte("-")
-	byteRandomCountry           = []byte("rr")
 	byteRandomCountryProxyverse = []byte("worldwide")
 )
 
@@ -114,41 +110,15 @@ func (s *Proxyverse) Credentials(request *pkg.Request) (string, []byte, []byte, 
 }
 
 func (s *Proxyverse) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {
-	if request.Continent != nil {
-		username.Write(byteContinent)     //nolint:errcheck
-		username.Write(request.Continent) //nolint:errcheck
-	}
-
 	if username.Len() > 0 {
 		username.Write(byteDash) //nolint:errcheck
 	}
 	username.Write(byteCountry) //nolint:errcheck
 	if request.Country != nil {
-		if bytes.EqualFold(request.Country, byteRandomCountry) {
-			request.Country = byteRandomCountryProxyverse
-		}
-
-		username.Write(request.Country) //nolint:errcheck
+		strLowerCountry := strings.ToLower(string(request.Country))
+		username.Write([]byte(strLowerCountry)) //nolint:errcheck
 	} else {
 		username.Write(byteRandomCountryProxyverse)
-	}
-
-	if request.City != nil {
-		if username.Len() > 0 {
-			username.Write(byteDash) //nolint:errcheck
-		}
-
-		username.Write(byteCity)     //nolint:errcheck
-		username.Write(request.City) //nolint:errcheck
-	}
-
-	if request.Region != nil {
-		if username.Len() > 0 {
-			username.Write(byteDash) //nolint:errcheck
-		}
-
-		username.Write(byteRegion)     //nolint:errcheck
-		username.Write(request.Region) //nolint:errcheck
 	}
 
 	if request.SessionID != "" {

@@ -67,10 +67,7 @@ func (p *Proxy) logError(err error, request *Request) {
 	}
 
 	p.config.Logger.Error(err.Error(),
-		zap.ByteString("continent", request.Continent),
 		zap.ByteString("country", request.Country),
-		zap.ByteString("region", request.Region),
-		zap.ByteString("city", request.City),
 		zap.ByteString("ip", request.IP),
 		zap.String("provider", pn),
 		zap.String("user_ip", request.UserIP))

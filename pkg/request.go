@@ -14,11 +14,8 @@ type Request struct {
 	Protocol Protocol
 
 	//Targeting
-	IP        []byte
-	Continent []byte
-	Country   []byte
-	Region    []byte
-	City      []byte
+	IP      []byte
+	Country []byte
 
 	ProfileName []byte
 	Category    []byte
@@ -52,10 +49,7 @@ func (r *Request) reset() {
 	r.Host = ""
 	r.Protocol = HTTP
 	r.Target = ""
-	r.Continent = nil
 	r.Country = nil
-	r.Region = nil
-	r.City = nil
 	r.IP = nil
 	r.SessionID = ""
 	r.SessionDuration = 0

@@ -16,7 +16,7 @@ var (
 	ErrInvalidTargeting = errors.New("invalid targeting")
 )
 
-func (p *Proxy) copy(account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
+func (p *Proxy) copy(account bool, done <-chan struct{}, _ string, src net.Conn, dst net.Conn) (err error) {
 	buf := make([]byte, p.config.BufferSize)
 
 	var accounted, written int64
@@ -73,7 +73,7 @@ LOOP:
 	return
 }
 
-func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Conn) error {
+func (p *Proxy) tunnel(_ *Purchase, request *Request, remote, conn net.Conn) error {
 	accountData := request.IP == nil
 
 	g, _ := errgroup.WithContext(context.Background())
@@ -101,7 +101,7 @@ func hasAccess(purchase *Purchase, request *Request) error {
 		}
 	}
 
-	if request.PurchaseType == PurchaseStatic && (request.Country != nil || request.Region != nil || request.City != nil) {
+	if request.PurchaseType == PurchaseStatic && request.Country != nil {
 		return ErrInvalidTargeting
 	}
 

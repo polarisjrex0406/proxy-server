@@ -106,12 +106,6 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 
 			req.Country = params[i]
 			continue
-		} else if bytes.EqualFold(p, byteUsernameRegion) {
-			req.Region = params[i]
-			continue
-		} else if bytes.EqualFold(p, byteUsernameCity) {
-			req.City = params[i]
-			continue
 		} else if bytes.EqualFold(p, byteUsernameSession) {
 			sessionID = params[i]
 			continue
@@ -133,31 +127,18 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 	// 	return ErrInvalidTargeting
 	// }
 
-	var c gountries.Country
-	if (req.Country != nil && !bytes.EqualFold(req.Country, byteUsernameRandom)) && req.City == nil {
-		c, err = s.location.FindCountryByAlpha(zerocopy.String(req.Country))
+	if req.Country != nil && !bytes.EqualFold(req.Country, byteUsernameRandom) {
+		_, err = s.location.FindCountryByAlpha(zerocopy.String(req.Country))
 		if err != nil {
 			if strings.EqualFold(zerocopy.String(req.Country), strUsernameCountryUK) { //small hack to accept both US and GB
 				req.Country = zerocopy.Bytes(strUsernameCountryGB)
-				c, err = s.location.FindCountryByAlpha(zerocopy.String(req.Country))
+				_, err = s.location.FindCountryByAlpha(zerocopy.String(req.Country))
 				if err != nil {
 					return ErrInvalidCountry
 				}
 			} else {
 				return err
 			}
-		}
-	}
-
-	if (req.Country != nil && !bytes.EqualFold(req.Country, byteUsernameRandom)) && req.Region != nil {
-		//Country and region was provided
-		_, err = c.FindSubdivisionByCode(zerocopy.String(req.Region))
-		if err != nil {
-			_, err = c.FindSubdivisionByName(zerocopy.String(req.Region))
-		}
-
-		if err != nil {
-			return ErrInvalidRegion
 		}
 	}
 
@@ -190,20 +171,9 @@ func (s *Base) Parse(username []byte, req *pkg.Request) (err error) {
 	}
 
 	req.Routes = make([]pkg.Route, 0, 6)
-	if req.Continent != nil {
-		req.Routes = append(req.Routes, pkg.RouteContinent)
-	}
 
 	if req.Country != nil {
 		req.Routes = append(req.Routes, pkg.RouteCountry)
-	}
-
-	if req.Region != nil {
-		req.Routes = append(req.Routes, pkg.RouteRegion)
-	}
-
-	if req.City != nil {
-		req.Routes = append(req.Routes, pkg.RouteCity)
 	}
 
 	req.Features = make([]pkg.Feature, 0, 2)
