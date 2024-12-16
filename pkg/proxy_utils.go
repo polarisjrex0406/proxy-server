@@ -1,11 +1,15 @@
 package pkg
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -13,6 +17,91 @@ var (
 	ErrIPNotFound       = errors.New("ip not found")
 	ErrInvalidTargeting = errors.New("invalid targeting")
 )
+
+func (p *Proxy) copy(account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
+	buf := make([]byte, p.config.BufferSize)
+
+	var accounted, written int64
+LOOP:
+	for {
+		select {
+		case <-done:
+			err = ErrConnectionClosed
+			break LOOP
+		default:
+		}
+
+		if p.config.ReadDeadline > 0 {
+			if err = src.SetReadDeadline(time.Now().Add(p.config.ReadDeadline)); err != nil {
+				fmt.Println("err =", err)
+				break LOOP
+			}
+		}
+
+		nr, er := src.Read(buf)
+		accounted += int64(nr)
+
+		if account && accounted >= p.config.AccountBytes {
+			// err = p.config.Accountant.Decrement(password, accounted)
+			accounted = 0
+		}
+
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				fmt.Println("ew =", ew)
+				break LOOP
+			}
+			if nw != nr {
+				err = io.ErrShortWrite
+				fmt.Println("nw & nr =", err)
+				break LOOP
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			fmt.Printf("er = %v from %v\n", er, src.RemoteAddr().String())
+			break LOOP
+		}
+	}
+
+	if account && accounted > 0 {
+		// err = p.config.Accountant.Decrement(password, accounted)
+	}
+
+	_ = dst.Close()
+	fmt.Println("Connection closed:", dst.RemoteAddr().String())
+	return
+}
+
+func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Conn) error {
+	accountData := request.IP == nil
+
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return p.copy(accountData, request.Done, request.Password, conn, remote) //nolint:errcheck
+	})
+	g.Go(func() error {
+		return p.copy(accountData, request.Done, request.Password, remote, conn) //nolint:errcheck
+	})
+
+	if err := g.Wait(); err != ErrConnectionClosed {
+		// p.stopTracker(purchase, request)
+		fmt.Println("err =", err)
+		fmt.Println("p.stopTracker(purchase, request)")
+	} else {
+		// p.deleteTracker(purchase, request)
+		fmt.Println("p.deleteTracker(purchase, request)")
+	}
+
+	return nil
+}
 
 type countConn struct {
 	net.Conn

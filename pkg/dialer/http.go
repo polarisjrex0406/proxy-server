@@ -3,6 +3,7 @@ package dialer
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -12,14 +13,14 @@ import (
 )
 
 var (
-	byteHTTP11  = []byte(" HTTP/1.1\r\n")
-	byteConnect = []byte("CONNECT ")
-	// byteOKStatus = []byte(" 200")
-	byteColon = []byte(":")
+	byteHTTP11   = []byte(" HTTP/1.1\r\n")
+	byteConnect  = []byte("CONNECT ")
+	byteOKStatus = []byte(" 200")
+	byteColon    = []byte(":")
 )
 
 var (
-// errBadStatusCode = errors.New("bad status code")
+	errBadStatusCode = errors.New("bad status code")
 )
 
 const (
@@ -43,9 +44,9 @@ func (d *HTTP) Dial(uri []byte, addr string, username, password []byte) (rc net.
 	rc = nil
 	err = fmt.Errorf("error while http dial")
 	if d.dialTimeout > 0 {
-		// rc, err = fasthttp.DialTimeout(addr, d.dialTimeout)
+		rc, err = net.DialTimeout("tcp", addr, d.dialTimeout)
 	} else {
-		// rc, err = fasthttp.Dial(addr)
+		rc, err = net.Dial("tcp", addr)
 	}
 	if err != nil {
 		return
@@ -68,22 +69,22 @@ func (d *HTTP) Dial(uri []byte, addr string, username, password []byte) (rc net.
 		return
 	}
 
-	// err = rc.SetReadDeadline(time.Now().Add(d.dialTimeout))
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err = rc.SetReadDeadline(time.Now().Add(d.dialTimeout))
+	if err != nil {
+		return nil, err
+	}
 
-	// buf := make([]byte, 1024)
-	// n, err := rc.Read(buf)
-	// if err != nil {
-	// 	rc.Close() //nolint:errcheck
-	// 	return nil, err
-	// }
+	buf := make([]byte, 1024)
+	n, err := rc.Read(buf)
+	if err != nil {
+		rc.Close() //nolint:errcheck
+		return nil, err
+	}
 
-	// if !bytes.Contains(buf[:n], byteOKStatus) {
-	// 	rc.Close() //nolint:errcheck
-	// 	return nil, errBadStatusCode
-	// }
+	if !bytes.Contains(buf[:n], byteOKStatus) {
+		rc.Close() //nolint:errcheck
+		return nil, errBadStatusCode
+	}
 
 	return
 }

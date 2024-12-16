@@ -1,15 +1,12 @@
 package pkg
 
 import (
-	"bufio"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strings"
 
@@ -20,6 +17,10 @@ import (
 
 const (
 	strHeaderBasicRealm = "Basic realm=\"\"\r\n\r\n"
+)
+
+var (
+	okHTTP11Response = []byte("HTTP/1.1 200 OK\r\n\r\n")
 )
 
 func (p *Proxy) ListenHTTP(ctx context.Context, port int) error {
@@ -224,6 +225,31 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
 	log.Printf("CONNECT requested to %v (from %v)", req.Host, req.RemoteAddr)
 
+	// dialDuration := time.Now()
+	upstream, err := request.Provider.Dial([]byte(req.RequestURI), request)
+	if err != nil {
+		// ctx.SetStatusCode(fasthttp.StatusGatewayTimeout)
+		// metrics.Errors504GatewayTimeout.Inc()
+		// p.stopTracker(purchase, request)
+		p.logError(err, request)
+		// metrics.IncProviderErrors(request.Provider.Name())
+		releaseRequest(request)
+		return
+	}
+	// metrics.IncProviderConnections(request.Provider.Name())
+	// metrics.ObserveProviderDialTime(request.Provider.Name(), float64(time.Since(dialDuration).Milliseconds()))
+
+	// metrics.ConnectionsHTTPS.Inc()
+
+	// request.Inc(headerSize(ctx))
+
+	// var noResponse bool
+	// if !ctx.Request.Header.IsHTTP11() {
+	// 	noResponse = true
+	// }
+
+	// ctx.HijackSetNoResponse(noResponse)
+
 	// "Hijack" the client connection to get a TCP (or TLS) socket we can read
 	// and write arbitrary data to/from.
 	hj, ok := w.(http.Hijacker)
@@ -231,113 +257,42 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 		log.Fatal("http server doesn't support hijacking connection")
 	}
 
-	clientConn, _, err := hj.Hijack()
+	client, _, err := hj.Hijack()
 	if err != nil {
 		log.Fatal("http hijacking failed")
 	}
 
-	// proxyReq.Host will hold the CONNECT target host, which will typically have
-	// a port - e.g. example.org:443
-	// To generate a fake certificate for example.org, we have to first split off
-	// the host from the port.
-	host, _, err := net.SplitHostPort(req.Host)
+	_, err = client.Write(okHTTP11Response)
 	if err != nil {
-		log.Fatal("error splitting host/port:", err)
+		// p.stopTracker(purchase, request)
+		_ = upstream.Close() //nolint:errcheck
+		_ = client.Close()   //nolint:errcheck
+		releaseRequest(request)
+		return
 	}
+	_ = p.tunnel(purchase, request, upstream, client)
 
-	// Create a fake TLS certificate for the target host, signed by our CA. The
-	// certificate will be valid for 10 days - this number can be changed.
-	pemCert, pemKey := createCert([]string{host}, p.config.CACert, p.config.CAKey, 240)
-	tlsCert, err := tls.X509KeyPair(pemCert, pemKey)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// ctx.Hijack(func(client net.Conn) {
+	// 	if noResponse {
+	// 		//http1.0 clients
+	// 		_, err := client.Write(okHTTP11Response)
+	// 		if err != nil {
+	// 			p.stopTracker(purchase, request)
+	// 			_ = upstream.Close() //nolint:errcheck
+	// 			_ = client.Close()   //nolint:errcheck
+	// 			releaseRequest(request)
+	// 			return
+	// 		}
+	// 	}
 
-	// Send an HTTP OK response back to the client; this initiates the CONNECT
-	// tunnel. From this point on the client will assume it's connected directly
-	// to the target.
-	if _, err := clientConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n")); err != nil {
-		log.Fatal("error writing status to client:", err)
-	}
+	// 	_ = p.tunnel(purchase, request, upstream, client) //nolint:errcheck
 
-	// Configure a new TLS server, pointing it at the client connection, using
-	// our certificate. This server will now pretend being the target.
-	tlsConfig := &tls.Config{
-		PreferServerCipherSuites: true,
-		CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
-		MinVersion:               tls.VersionTLS12,
-		Certificates:             []tls.Certificate{tlsCert},
-	}
+	// 	releaseRequest(request)
+	// })
 
-	tlsConn := tls.Server(clientConn, tlsConfig)
-	defer tlsConn.Close()
+	// ctx.SetStatusCode(fasthttp.StatusOK)
 
-	// Create a buffered reader for the client connection; this is required to
-	// use http package functions with this connection.
-	connReader := bufio.NewReader(tlsConn)
-
-	// Run the proxy in a loop until the client closes the connection.
-	for {
-		r, err := http.ReadRequest(connReader)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Fatal(err)
-		}
-
-		// We can dump the request; log it, modify it...
-		if b, err := httputil.DumpRequest(r, false); err == nil {
-			log.Printf("incoming request:\n%s\n", string(b))
-		}
-
-		// Handle Basic Authentication
-		hostname, proxyUsername, proxyPassword, proxyCredentials, err := request.Provider.Credentials(request) // FIXME looks awkward
-		if err != nil {
-			return
-		}
-
-		// Take the original request and changes its destination to be forwarded
-		// to the target server.
-		changeRequestToTarget(r, req.Host)
-
-		proxyStr := hostname
-		// Set the Authorization header
-		if len(proxyCredentials) > 0 {
-			r.Header.Set(constants.HeaderProxyAuthorization, "Basic "+zerocopy.String(proxyCredentials))
-			proxyStr = fmt.Sprintf("%s:%s@%s", zerocopy.String(proxyUsername), zerocopy.String(proxyPassword), proxyStr)
-		}
-		proxyStr = fmt.Sprintf("http://%s", proxyStr)
-
-		proxyURL, err := url.Parse(proxyStr)
-		if err != nil {
-			http.Error(w, "Failed to set up proxy", http.StatusInternalServerError)
-			return
-		}
-		// Create a client with the proxy
-		client := &http.Client{
-			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			},
-		}
-
-		// Send the request to the target server and log the response.
-		resp, err := client.Do(r)
-		if err != nil {
-			log.Fatal("error sending request to target:", err)
-		}
-
-		if b, err := httputil.DumpResponse(resp, false); err == nil {
-			log.Printf("target response:\n%s\n", string(b))
-		}
-		defer resp.Body.Close()
-
-		// Send the target server's response back to the client.
-		resp.ProtoMajor = 1
-		resp.ProtoMinor = 1
-		if err := resp.Write(tlsConn); err != nil {
-			log.Println("error writing response back:", err)
-		}
-	}
+	// ctx.Success("", nil)
 }
 
 // changeRequestToTarget modifies req to be re-routed to the given target;

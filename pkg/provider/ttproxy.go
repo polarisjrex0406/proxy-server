@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/base64"
+	"net"
 
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/valyala/bytebufferpool"
@@ -16,16 +17,18 @@ type TTProxy struct {
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
+	dialer   pkg.Dialer
 
 	purchaseId uint
 }
 
-func NewTTProxy(username []byte, password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *TTProxy {
+func NewTTProxy(username []byte, password []byte, weight uint64, protocol pkg.Protocol, dialer pkg.Dialer, purchaseId uint) *TTProxy {
 	return &TTProxy{
 		username:   username,
 		password:   password,
 		weight:     weight,
 		protocol:   protocol,
+		dialer:     dialer,
 		purchaseId: purchaseId,
 	}
 }
@@ -78,6 +81,10 @@ func (s *TTProxy) Credentials(request *pkg.Request) (string, []byte, []byte, []b
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
 	return GateTTProxy, s.username, s.password, cc, nil
+}
+
+func (s *TTProxy) Dial(uri []byte, request *pkg.Request) (rc net.Conn, err error) {
+	return s.dialer.Dial(uri, GateTTProxy, s.username, s.password)
 }
 
 func (s *TTProxy) PurchasedBy() uint {

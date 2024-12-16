@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"encoding/base64"
+	"net"
 	"strconv"
 
 	"github.com/omimic12/proxy-server/pkg"
@@ -22,16 +23,18 @@ type Databay struct {
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
+	dialer   pkg.Dialer
 
 	purchaseId uint
 }
 
-func NewDatabay(username []byte, password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *Databay {
+func NewDatabay(username []byte, password []byte, weight uint64, protocol pkg.Protocol, dialer pkg.Dialer, purchaseId uint) *Databay {
 	return &Databay{
 		username:   username,
 		password:   password,
 		weight:     weight,
 		protocol:   protocol,
+		dialer:     dialer,
 		purchaseId: purchaseId,
 	}
 }
@@ -148,6 +151,10 @@ func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pk
 	}
 
 	return nil
+}
+
+func (s *Databay) Dial(uri []byte, request *pkg.Request) (rc net.Conn, err error) {
+	return s.dialer.Dial(uri, GateDatabay, s.username, s.password)
 }
 
 func (s *Databay) PurchasedBy() uint {

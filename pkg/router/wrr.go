@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/omimic12/proxy-server/pkg"
+	"github.com/omimic12/proxy-server/pkg/dialer"
 	"github.com/omimic12/proxy-server/pkg/provider"
 	"github.com/omimic12/proxy-server/pkg/zerocopy"
 	"go.uber.org/zap"
@@ -262,6 +263,7 @@ func (r *WeightedRoundRobin) selectIP(purchase *pkg.Purchase, request *pkg.Reque
 
 func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg.Provider, error) {
 	var p pkg.Provider
+	var d pkg.Dialer = dialer.NewHTTP(dialTimeout, readDeadline)
 	switch proxy.Type {
 	case "static":
 		return provider.NewStatic(
@@ -271,6 +273,7 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 			1,
 			"static",
 			pkg.Protocol(proxy.Protocol),
+			d,
 		)
 	case "backconnect":
 		return nil, nil
@@ -282,6 +285,7 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 				zerocopy.Bytes(proxy.Password),
 				1,
 				pkg.Protocol(proxy.Protocol),
+				d,
 				proxy.PurchaseID,
 			)
 		case "dataimpulse":
@@ -290,6 +294,7 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 				zerocopy.Bytes(proxy.Password),
 				1,
 				pkg.Protocol(proxy.Protocol),
+				d,
 				proxy.PurchaseID,
 			)
 		case "proxyverse":
@@ -297,6 +302,7 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 				zerocopy.Bytes(proxy.Password),
 				1,
 				pkg.Protocol(proxy.Protocol),
+				d,
 				proxy.PurchaseID,
 			)
 		case "databay":
@@ -305,6 +311,7 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 				zerocopy.Bytes(proxy.Password),
 				1,
 				pkg.Protocol(proxy.Protocol),
+				d,
 				proxy.PurchaseID,
 			)
 		default:

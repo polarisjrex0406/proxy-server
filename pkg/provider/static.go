@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/base64"
+	"net"
 
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/valyala/bytebufferpool"
@@ -15,6 +16,7 @@ type Static struct {
 	encoded  []byte
 	weight   uint64
 	protocol pkg.Protocol
+	dialer   pkg.Dialer
 }
 
 func NewStatic(
@@ -24,6 +26,7 @@ func NewStatic(
 	weight uint64,
 	provider string,
 	protocol pkg.Protocol,
+	dialer pkg.Dialer,
 ) (*Static, error) {
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
@@ -43,6 +46,7 @@ func NewStatic(
 		protocol: protocol,
 		encoded:  encoded,
 		weight:   weight,
+		dialer:   dialer,
 	}, nil
 }
 
@@ -84,6 +88,10 @@ func (s *Static) BandwidthLimit() int64 {
 
 func (s *Static) Credentials(_ *pkg.Request) (string, []byte, []byte, []byte, error) {
 	return s.addr, s.username, s.password, s.encoded, nil
+}
+
+func (s *Static) Dial(uri []byte, _ *pkg.Request) (rc net.Conn, err error) {
+	return s.dialer.Dial(uri, s.addr, s.username, s.password)
 }
 
 func (s *Static) PurchasedBy() uint {

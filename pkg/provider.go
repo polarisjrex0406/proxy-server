@@ -1,5 +1,7 @@
 package pkg
 
+import "net"
+
 const (
 	ProviderStatic      = "static"
 	ProviderDataImpulse = "dataimpulse"
@@ -41,6 +43,8 @@ type Provider interface {
 	BandwidthLimit() int64
 
 	Credentials(*Request) (hostname string, username, password []byte, encoded []byte, err error)
+
+	Dial([]byte, *Request) (net.Conn, error)
 
 	PurchasedBy() uint
 }

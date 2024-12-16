@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/base64"
+	"net"
 
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/valyala/bytebufferpool"
@@ -16,16 +17,18 @@ type DataImpulse struct {
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
+	dialer   pkg.Dialer
 
 	purchaseId uint
 }
 
-func NewDataImpulse(username []byte, password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *DataImpulse {
+func NewDataImpulse(username []byte, password []byte, weight uint64, protocol pkg.Protocol, dialer pkg.Dialer, purchaseId uint) *DataImpulse {
 	return &DataImpulse{
 		username:   username,
 		password:   password,
 		weight:     weight,
 		protocol:   protocol,
+		dialer:     dialer,
 		purchaseId: purchaseId,
 	}
 }
@@ -78,6 +81,10 @@ func (s *DataImpulse) Credentials(request *pkg.Request) (string, []byte, []byte,
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
 	return GateDataImpulse, s.username, s.password, cc, nil
+}
+
+func (s *DataImpulse) Dial(uri []byte, request *pkg.Request) (rc net.Conn, err error) {
+	return s.dialer.Dial(uri, GateDataImpulse, s.username, s.password)
 }
 
 func (s *DataImpulse) PurchasedBy() uint {

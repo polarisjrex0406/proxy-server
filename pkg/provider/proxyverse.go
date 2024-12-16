@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"encoding/base64"
+	"net"
 	"strconv"
 
 	"github.com/omimic12/proxy-server/pkg"
@@ -30,15 +31,17 @@ type Proxyverse struct {
 	password []byte
 	weight   uint64
 	protocol pkg.Protocol
+	dialer   pkg.Dialer
 
 	purchaseId uint
 }
 
-func NewProxyverse(password []byte, weight uint64, protocol pkg.Protocol, purchaseId uint) *Proxyverse {
+func NewProxyverse(password []byte, weight uint64, protocol pkg.Protocol, dialer pkg.Dialer, purchaseId uint) *Proxyverse {
 	return &Proxyverse{
 		password:   password,
 		weight:     weight,
 		protocol:   protocol,
+		dialer:     dialer,
 		purchaseId: purchaseId,
 	}
 }
@@ -77,6 +80,18 @@ func (s *Proxyverse) HasRoutes(levels ...pkg.Route) bool {
 
 func (s *Proxyverse) BandwidthLimit() int64 {
 	return -1
+}
+
+func (s *Proxyverse) Dial(uri []byte, request *pkg.Request) (rc net.Conn, err error) {
+	username := bytebufferpool.Get()
+	defer bytebufferpool.Put(username)
+
+	err = s.buildUsername(username, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.dialer.Dial(uri, GateProxyverse, username.Bytes(), s.password)
 }
 
 func (s *Proxyverse) Credentials(request *pkg.Request) (string, []byte, []byte, []byte, error) {
