@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/valyala/bytebufferpool"
@@ -14,7 +15,7 @@ const (
 )
 
 var (
-	byteRandomCountryDatabay = []byte("worldwide")
+	byteCountryCodeDatabay = []byte("countryCode-")
 )
 
 type Databay struct {
@@ -84,13 +85,14 @@ func (s *Databay) Credentials(request *pkg.Request) (string, []byte, []byte, []b
 		return "", nil, nil, nil, err
 	}
 
+	username := buf.Bytes()
 	buf.Write(byteColon)  //nolint:errcheck
 	buf.Write(s.password) //nolint:errcheck
 
 	cc := make([]byte, base64.StdEncoding.EncodedLen(buf.Len()))
 	base64.StdEncoding.Encode(cc, buf.Bytes())
 
-	return GateDatabay, s.username, s.password, cc, nil
+	return GateDatabay, username, s.password, cc, nil
 }
 
 func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pkg.Request) error {
@@ -99,8 +101,9 @@ func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pk
 			username.Write(byteDash) //nolint:errcheck
 		}
 
-		username.Write(byteCountry)     //nolint:errcheck
-		username.Write(request.Country) //nolint:errcheck
+		username.Write(byteCountryCodeDatabay) //nolint:errcheck
+		strUpperCountry := strings.ToUpper(string(request.Country))
+		username.Write([]byte(strUpperCountry)) //nolint:errcheck
 	}
 
 	if request.SessionID != "" {
@@ -125,7 +128,16 @@ func (s *Databay) buildUsername(username *bytebufferpool.ByteBuffer, request *pk
 }
 
 func (s *Databay) Dial(uri []byte, request *pkg.Request) (rc net.Conn, err error) {
-	return s.dialer.Dial(uri, GateDatabay, s.username, s.password)
+	username := bytebufferpool.Get()
+	defer bytebufferpool.Put(username)
+
+	username.Write(s.username)
+	err = s.buildUsername(username, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.dialer.Dial(uri, GateDatabay, username.Bytes(), s.password)
 }
 
 func (s *Databay) PurchasedBy() uint {
