@@ -73,7 +73,7 @@ LOOP:
 	return
 }
 
-func (p *Proxy) tunnel(_ *Purchase, request *Request, remote, conn net.Conn) error {
+func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Conn) error {
 	accountData := request.IP == nil
 
 	g, _ := errgroup.WithContext(context.Background())
@@ -85,9 +85,9 @@ func (p *Proxy) tunnel(_ *Purchase, request *Request, remote, conn net.Conn) err
 	})
 
 	if err := g.Wait(); err != ErrConnectionClosed {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 	} else {
-		// p.deleteTracker(purchase, request)
+		p.deleteTracker(purchase, request)
 	}
 
 	return nil

@@ -29,7 +29,6 @@ type Request struct {
 	SessionDuration time.Duration
 
 	Provider     Provider
-	PurchaseUUID string
 	PurchaseType PurchaseType
 
 	Password string
@@ -54,7 +53,7 @@ func (r *Request) reset() {
 	r.SessionID = ""
 	r.SessionDuration = 0
 	r.Provider = nil
-	r.PurchaseUUID = ""
+	r.PurchaseID = 0
 	r.PurchaseType = PurchaseStatic
 	r.Password = ""
 	atomic.StoreInt64(&r.Written, 0)

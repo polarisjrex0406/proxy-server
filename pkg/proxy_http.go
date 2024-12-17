@@ -90,6 +90,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	request.PurchaseID = purchase.ID
 	request.PurchaseType = PurchaseType(purchase.Type)
 
 	err = hasAccess(purchase, request)
@@ -114,8 +115,8 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if purchase.Threads > 0 &&
-		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseUUID, request.Done) >= purchase.Threads {
-		// p.config.ConnectionTracker.Stop(request.ID, request.PurchaseUUID)
+		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseID, request.Done) >= purchase.Threads {
+		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
 		w.WriteHeader(http.StatusTooManyRequests)
 		// metrics.Errors429TooManyRequests.Inc()
 		releaseRequest(request)
@@ -124,20 +125,20 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 
 	err = p.selectProvider(purchase, request)
 	if err == ErrDomainBlocked {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusForbidden)
 		releaseRequest(request) //nolint:errcheck
 		// metrics.Errors403Forbidden.Inc()
 		return
 	} else if err == ErrFailedSelectProvider {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusBadGateway)
 		p.logError(errors.Wrap(err, "failed to select provider"), request)
 		// metrics.Errors502Internal.Inc()
 		releaseRequest(request) //nolint:errcheck
 		return
 	} else if err != nil {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(errors.Wrap(err, "error during provider selection"), request)
 		// metrics.Errors500Internal.Inc()
@@ -153,9 +154,9 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	p.serveHTTP(purchase, request, w, req)
 }
 
-func (p *Proxy) serveHTTP(_ *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
+func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {
 	defer func() {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		releaseRequest(request)
 	}()
 
@@ -235,7 +236,7 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
 		// metrics.Errors504GatewayTimeout.Inc()
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		p.logError(err, request)
 		// metrics.IncProviderErrors(request.Provider.Name())
 		releaseRequest(request)
@@ -262,7 +263,7 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 
 	_, err = client.Write(okHTTP11Response)
 	if err != nil {
-		// p.stopTracker(purchase, request)
+		p.stopTracker(purchase, request)
 		_ = upstream.Close() //nolint:errcheck
 		_ = client.Close()   //nolint:errcheck
 		releaseRequest(request)
@@ -270,4 +271,30 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 	}
 	_ = p.tunnel(purchase, request, upstream, client)
 	releaseRequest(request)
+}
+
+func (p *Proxy) stopTracker(purchase *Purchase, request *Request) {
+	if purchase.Threads <= 0 {
+		return
+	}
+
+	threads := p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
+	if threads <= 0 {
+		p.config.ZeroThreads <- map[uint]int64{
+			request.PurchaseID: threads,
+		}
+	}
+}
+
+func (p *Proxy) deleteTracker(purchase *Purchase, request *Request) {
+	if purchase.Threads <= 0 {
+		return
+	}
+
+	threads := p.config.ConnectionTracker.Delete(request.ID, request.PurchaseID)
+	if threads <= 0 {
+		p.config.ZeroThreads <- map[uint]int64{
+			request.PurchaseID: threads,
+		}
+	}
 }

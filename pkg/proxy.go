@@ -73,11 +73,11 @@ func (p *Proxy) logError(err error, request *Request) {
 		zap.String("user_ip", request.UserIP))
 }
 
-func (p *Proxy) PublishThreads(ctx context.Context, ch <-chan map[string]int64, period time.Duration, channel string, client *redis.Client) error {
+func (p *Proxy) PublishThreads(ctx context.Context, ch <-chan map[uint]int64, period time.Duration, channel string, client *redis.Client) error {
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
 
-	var cache = make(map[string]int64)
+	var cache = make(map[uint]int64)
 
 	for {
 		select {
@@ -98,7 +98,7 @@ func (p *Proxy) PublishThreads(ctx context.Context, ch <-chan map[string]int64, 
 					threads[k] = v
 				}
 
-				cache = make(map[string]int64)
+				cache = make(map[uint]int64)
 			}
 
 			data, err := json.Marshal(threads)

@@ -10,7 +10,7 @@ import (
 type Options struct {
 	AccountBytes      int64
 	BufferSize        int
-	ZeroThreads       chan<- map[string]int64
+	ZeroThreads       chan<- map[uint]int64
 	ReadDeadline      time.Duration
 	DialTimeout       time.Duration
 	HTTPServer        *http.Server
@@ -26,7 +26,7 @@ type Options struct {
 
 type Option func(*Options)
 
-func WithZeroThreadsChannel(ch chan<- map[string]int64) Option {
+func WithZeroThreadsChannel(ch chan<- map[uint]int64) Option {
 	return func(options *Options) {
 		options.ZeroThreads = ch
 	}

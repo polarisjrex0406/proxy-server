@@ -13,7 +13,7 @@ import (
 type Map struct {
 	mu        sync.RWMutex
 	requests  map[string]chan<- struct{}
-	purchases map[string]int64
+	purchases map[uint]int64
 	client    *redis.Client
 
 	logger *zap.Logger
@@ -24,27 +24,27 @@ func NewMap(client *redis.Client, logger *zap.Logger) *Map {
 		mu:        sync.RWMutex{},
 		client:    client,
 		logger:    logger,
-		purchases: make(map[string]int64),
+		purchases: make(map[uint]int64),
 		requests:  make(map[string]chan<- struct{}),
 	}
 }
 
-func (r *Map) Watch(requestID string, purchaseUUID string, ch chan<- struct{}) int64 {
+func (r *Map) Watch(requestID string, purchaseID uint, ch chan<- struct{}) int64 {
 	r.mu.Lock()
 	r.requests[requestID] = ch
-	threads, ok := r.purchases[purchaseUUID]
+	threads, ok := r.purchases[purchaseID]
 	if !ok {
 		threads = 0
 	}
 
 	threads++
-	r.purchases[purchaseUUID] = threads
+	r.purchases[purchaseID] = threads
 	r.mu.Unlock()
 
 	return threads
 }
 
-func (r *Map) Stop(requestID string, purchaseUUID string) int64 {
+func (r *Map) Stop(requestID string, purchaseID uint) int64 {
 	r.mu.Lock()
 	d, ok := r.requests[requestID]
 	if !ok {
@@ -55,13 +55,13 @@ func (r *Map) Stop(requestID string, purchaseUUID string) int64 {
 	d <- struct{}{}
 	delete(r.requests, requestID)
 
-	threads := r.purchases[purchaseUUID]
+	threads := r.purchases[purchaseID]
 	threads -= 1
 
 	if threads <= 0 {
-		delete(r.purchases, purchaseUUID)
+		delete(r.purchases, purchaseID)
 	} else {
-		r.purchases[purchaseUUID] = threads
+		r.purchases[purchaseID] = threads
 	}
 
 	r.mu.Unlock()
@@ -69,7 +69,7 @@ func (r *Map) Stop(requestID string, purchaseUUID string) int64 {
 	return threads
 }
 
-func (r *Map) Delete(requestID string, purchaseUUID string) int64 {
+func (r *Map) Delete(requestID string, purchaseID uint) int64 {
 	r.mu.Lock()
 	_, ok := r.requests[requestID]
 	if !ok {
@@ -79,13 +79,13 @@ func (r *Map) Delete(requestID string, purchaseUUID string) int64 {
 
 	delete(r.requests, requestID)
 
-	threads := r.purchases[purchaseUUID]
+	threads := r.purchases[purchaseID]
 	threads -= 1
 
 	if threads <= 0 {
-		delete(r.purchases, purchaseUUID)
+		delete(r.purchases, purchaseID)
 	} else {
-		r.purchases[purchaseUUID] = threads
+		r.purchases[purchaseID] = threads
 	}
 
 	r.mu.Unlock()
@@ -93,7 +93,7 @@ func (r *Map) Delete(requestID string, purchaseUUID string) int64 {
 	return threads
 }
 
-func (r *Map) Threads() map[string]int64 {
+func (r *Map) Threads() map[uint]int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

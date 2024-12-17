@@ -18,6 +18,7 @@ import (
 	"github.com/omimic12/proxy-server/pkg/router"
 	"github.com/omimic12/proxy-server/pkg/sessions"
 	"github.com/omimic12/proxy-server/pkg/settings"
+	"github.com/omimic12/proxy-server/pkg/tracker"
 	"github.com/omimic12/proxy-server/pkg/username"
 	"github.com/pariz/gountries"
 	"go.uber.org/zap"
@@ -124,10 +125,15 @@ func main() {
 	sessionStorage := sessions.NewGCache(cfg.Session.CacheSize, logger)
 	defer sessionStorage.Close() //nolint:errcheck
 
+	requestTracker := tracker.NewMap(redisData, logger)
+	defer requestTracker.Close() //nolint:errcheck
+
+	go requestTracker.Listen(ctx, cfg.Redis.Channel.User) //nolint:errcheck
+
 	httpServer := newHttp(cfg)
 	httpsServer := newHttp(cfg)
 
-	ch := make(chan map[string]int64)
+	ch := make(chan map[uint]int64)
 
 	p := pkg.NewProxy(
 		pkg.WithZeroThreadsChannel(ch),
@@ -141,6 +147,7 @@ func main() {
 		pkg.WithRouter(rr),
 		pkg.WithSessions(sessionStorage),
 		pkg.WithUsernameParser(parser),
+		pkg.WithTracker(requestTracker),
 		pkg.WithLogger(logger),
 	)
 
