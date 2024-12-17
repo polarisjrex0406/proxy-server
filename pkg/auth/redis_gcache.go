@@ -85,6 +85,7 @@ func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.P
 			Threads: threads,
 			IPs:     make(map[string]struct{}),
 			Type:    t,
+			Region:  gjson.GetBytes(data, "region").String(),
 		}
 
 		bandwidthLimited := gjson.GetBytes(data, "bandwidth_limited").Bool()

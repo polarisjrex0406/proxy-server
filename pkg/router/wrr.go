@@ -176,20 +176,27 @@ func (r *WeightedRoundRobin) selectIP(purchase *pkg.Purchase, _ *pkg.Request) (p
 		return r.ipStaticSlice[i], nil
 	}
 	if purchase.Type == "backconnect" {
+		// Extract from slice by region
+		ipBackconnectSliceByRegion := make([]pkg.Provider, 0)
+		for _, backconnect := range r.ipBackconnectSlice {
+			if backconnect.HasRegion(purchase.Region) {
+				ipBackconnectSliceByRegion = append(ipBackconnectSliceByRegion, backconnect)
+			}
+		}
+
 		i := 0
-		if len(r.ipBackconnectSlice) > 0 {
+		if len(ipBackconnectSliceByRegion) > 0 {
 			source := rand.NewSource(time.Now().UnixNano())
 			rs := rand.New(source)
-			max := len(r.ipBackconnectSlice)
+			max := len(ipBackconnectSliceByRegion)
 			i = rs.Intn(max-0) + 0
-		} else if len(r.ipBackconnectSlice) == 0 {
+		} else if len(ipBackconnectSliceByRegion) == 0 {
 			return nil, pkg.ErrIPNotFound
 		}
-		return r.ipBackconnectSlice[i], nil
+		return ipBackconnectSliceByRegion[i], nil
 	}
 	if purchase.Type == "provider" {
 		var resellerPurchased = make([]pkg.Provider, 0)
-
 		for _, reseller := range r.resellerSlice {
 			if reseller.PurchasedBy() == purchase.ID {
 				resellerPurchased = append(resellerPurchased, reseller)
@@ -228,7 +235,16 @@ func proxyToProvider(dialTimeout, readDeadline time.Duration, proxy *Proxy) (pkg
 			d,
 		)
 	case "backconnect":
-		return nil, nil
+		return provider.NewBackconnect(
+			fmt.Sprintf("%s:%d", proxy.Host, proxy.Port),
+			zerocopy.Bytes(proxy.Username),
+			zerocopy.Bytes(proxy.Password),
+			1,
+			"backconnect",
+			pkg.Protocol(proxy.Protocol),
+			d,
+			proxy.Region,
+		)
 	case "provider":
 		switch proxy.Reseller {
 		case "ttproxy":
