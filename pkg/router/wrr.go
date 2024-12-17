@@ -112,7 +112,34 @@ func NewWeightedRoundRobin(
 			w.ipStaticSlice = ipStaticSlice
 			w.ipBackconnectSlice = ipBackconnectSlice
 			w.resellerSlice = resellerSlice
-			w.lastResellerIndexes = lastResellerIndexes
+			// Adding indexes for new purchases only with maintaining current ones, removing unnecessary ones
+			if len(w.lastResellerIndexes) > 0 {
+				keysToRemove := make([]uint, 0)
+				keysToMaintain := make([]uint, 0)
+				for purchaseId := range w.lastResellerIndexes {
+					if _, exists := lastResellerIndexes[purchaseId]; !exists {
+						keysToRemove = append(keysToRemove, purchaseId)
+					} else {
+						keysToMaintain = append(keysToMaintain, purchaseId)
+					}
+				}
+				// Remove unnecessary
+				for _, key := range keysToRemove {
+					delete(w.lastResellerIndexes, key)
+				}
+				// Maintain current
+				for _, key := range keysToMaintain {
+					delete(lastResellerIndexes, key)
+				}
+				// Add new
+				if len(lastResellerIndexes) > 0 {
+					for purchaseId := range lastResellerIndexes {
+						w.lastResellerIndexes[purchaseId] = lastResellerIndexes[purchaseId]
+					}
+				}
+			} else {
+				w.lastResellerIndexes = lastResellerIndexes
+			}
 
 			logger.Debug("proxies sync: done",
 				zap.Int("static", len(w.ipStaticSlice)),
