@@ -222,6 +222,11 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
+
+	err = p.config.Accountant.Decrement(request.Password, request.Written)
+	if err != nil {
+		p.logError(err, request)
+	}
 }
 
 func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.ResponseWriter, req *http.Request) {

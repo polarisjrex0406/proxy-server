@@ -128,6 +128,11 @@ type Config struct {
 		}
 	}
 
+	Sync struct {
+		Activity time.Duration `long:"sync-activity" env:"SYNC_ACTIVITY" default:"1s"`
+		Data     time.Duration `long:"sync-data" env:"SYNC_DATA" default:"1s"`
+	}
+
 	Session struct {
 		CacheSize   int           `long:"session-cache-size" env:"SESSION_CACHE_SIZE" default:"10000" description:""`
 		Duration    time.Duration `long:"session-duration" env:"SESSION_DURATION" default:"10m" description:""`

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -14,6 +16,7 @@ import (
 	"github.com/omimic12/proxy-server/config"
 	"github.com/omimic12/proxy-server/database"
 	"github.com/omimic12/proxy-server/pkg"
+	"github.com/omimic12/proxy-server/pkg/accountant"
 	"github.com/omimic12/proxy-server/pkg/auth"
 	"github.com/omimic12/proxy-server/pkg/router"
 	"github.com/omimic12/proxy-server/pkg/sessions"
@@ -27,11 +30,13 @@ import (
 )
 
 var (
-	ctx = context.Background()
-	db  *sql.DB
+	db *sql.DB
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
 	// 1. Load configuration
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -91,6 +96,12 @@ func main() {
 		logger.Panic("failed to ping redis proxy database", zap.Error(err))
 	}
 
+	const dataChBufferSize = 500
+	dataAccountant, err := accountant.NewRedis(ctx, dataChBufferSize, cfg.Redis.Channel.Data, redisData, cfg.Sync.Data, logger)
+	if err != nil {
+		panic(err)
+	}
+
 	a, err := auth.NewRedisGCache(
 		ctx,
 		cfg.Authorization.CacheSize,
@@ -145,6 +156,7 @@ func main() {
 		pkg.WithHTTPsServer(httpsServer),
 		pkg.WithAuth(a),
 		pkg.WithRouter(rr),
+		pkg.WithAccountant(dataAccountant),
 		pkg.WithSessions(sessionStorage),
 		pkg.WithUsernameParser(parser),
 		pkg.WithTracker(requestTracker),
@@ -192,7 +204,28 @@ func main() {
 		}()
 	}
 
-	select {}
+	//Goroutine responsible for the publishing threads statistics
+	go func() {
+		options, err := redis.ParseURL(fmt.Sprintf("%s/%d", cfg.Redis.DSN, cfg.Redis.DB.Data))
+		if err != nil {
+			logger.Panic("failed to parse redis connection", zap.Error(err))
+		}
+
+		r := redis.NewClient(options)
+		err = r.Ping(context.Background()).Err()
+		if err != nil {
+			logger.Panic("failed to ping redis", zap.Error(err))
+		}
+
+		err = p.PublishThreads(ctx, ch, cfg.Sync.Activity, cfg.Redis.Channel.Activity, r)
+		if err != nil {
+			logger.Error("redis threads stats publisher failed ", zap.Error(err))
+		}
+	}()
+
+	logger.Info("Proxy: started")
+	listenOnRestart(ctx, cancel, cfg.Redis.Channel.Restart, redisData)
+	logger.Info("Proxy: stopped")
 }
 
 func newHttp(conf *config.Config) *http.Server {
@@ -202,4 +235,17 @@ func newHttp(conf *config.Config) *http.Server {
 		IdleTimeout:  conf.HTTP.IdleTimeout,
 	}
 	return srv
+}
+
+func listenOnRestart(ctx context.Context, cancel context.CancelFunc, channel string, client *redis.Client) {
+	ch := client.Subscribe(context.Background(), channel).Channel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+			cancel()
+			return
+		}
+	}
 }

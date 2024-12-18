@@ -16,7 +16,7 @@ var (
 	ErrInvalidTargeting = errors.New("invalid targeting")
 )
 
-func (p *Proxy) copy(account bool, done <-chan struct{}, _ string, src net.Conn, dst net.Conn) (err error) {
+func (p *Proxy) copy(account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
 	buf := make([]byte, p.config.BufferSize)
 
 	var accounted, written int64
@@ -39,7 +39,7 @@ LOOP:
 		accounted += int64(nr)
 
 		if account && accounted >= p.config.AccountBytes {
-			// err = p.config.Accountant.Decrement(password, accounted)
+			err = p.config.Accountant.Decrement(password, accounted)
 			accounted = 0
 		}
 
@@ -66,7 +66,7 @@ LOOP:
 	}
 
 	if account && accounted > 0 {
-		// err = p.config.Accountant.Decrement(password, accounted)
+		err = p.config.Accountant.Decrement(password, accounted)
 	}
 
 	_ = dst.Close()
