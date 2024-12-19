@@ -3,6 +3,7 @@ package pkg
 import (
 	"bytes"
 	"encoding/base64"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -71,4 +72,27 @@ func parseBasicAuth(credentials []byte) (username []byte, password string, ok bo
 		return
 	}
 	return buf[:s], string(buf[s+1:]), true
+}
+
+func headerSize(req *http.Request) int64 {
+	size := int64(0)
+
+	// Calculate size of request headers
+	for key, values := range req.Header {
+		for _, value := range values {
+			size += int64(len(key) + len(value) + 2) // 2 for \r\n
+		}
+	}
+
+	// Calculate size of the request body if available
+	if req.Body != nil {
+		bodyBytes, err := io.ReadAll(req.Body)
+		if err == nil {
+			size += int64(len(bodyBytes))
+			// Reset the body so it can be read again later
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+	}
+
+	return size
 }

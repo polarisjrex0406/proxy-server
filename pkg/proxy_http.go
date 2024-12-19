@@ -44,7 +44,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	request.Done = make(chan struct{}, 1)
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
-		// metrics.Errors400BadRequest.Inc()
 		w.WriteHeader(http.StatusBadRequest)
 		releaseRequest(request)
 		return
@@ -52,7 +51,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 
 	userIP := net.ParseIP(host)
 	if userIP == nil {
-		// metrics.Errors400BadRequest.Inc()
 		w.WriteHeader(http.StatusBadRequest)
 		releaseRequest(request)
 		return
@@ -61,7 +59,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 
 	err = parseRequest(req.Host, username, password, request, p.config.Parser)
 	if err != nil {
-		// metrics.Errors400BadRequest.Inc()
 		w.WriteHeader(http.StatusBadRequest)
 		releaseRequest(request)
 		return
@@ -72,20 +69,17 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	purchase, err := p.config.Auth.Authenticate(req.Context(), request.Password)
 
 	if err == ErrMissingAuth || err == ErrPurchaseNotFound {
-		// metrics.Errors407AuthRequired.Inc()
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		w.Header().Add(constants.HeaderProxyAuthenticate, strHeaderBasicRealm)
 		releaseRequest(request)
 		return
 	} else if err == ErrNotEnoughData {
 		w.WriteHeader(http.StatusPaymentRequired)
-		// metrics.Errors402PaymentRequired.Inc()
 		releaseRequest(request)
 		return
 	} else if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(err, request)
-		// metrics.Errors500Internal.Inc()
 		releaseRequest(request)
 		return
 	}
@@ -97,19 +91,16 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	if err == ErrDomainBlocked || err == ErrIPNotAllowed {
 		p.config.Logger.Info(request.UserIP)
 		w.WriteHeader(http.StatusForbidden)
-		// metrics.Errors403Forbidden.Inc()
 		releaseRequest(request)
 		return
 	} else if err == ErrInvalidTargeting {
 		w.WriteHeader(http.StatusBadRequest)
 		p.logError(err, request)
-		// metrics.Errors400BadRequest.Inc()
 		releaseRequest(request)
 		return
 	} else if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(err, request)
-		// metrics.Errors500Internal.Inc()
 		releaseRequest(request)
 		return
 	}
@@ -118,7 +109,6 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseID, request.Done) >= purchase.Threads {
 		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
 		w.WriteHeader(http.StatusTooManyRequests)
-		// metrics.Errors429TooManyRequests.Inc()
 		releaseRequest(request)
 		return
 	}
@@ -128,20 +118,17 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusForbidden)
 		releaseRequest(request) //nolint:errcheck
-		// metrics.Errors403Forbidden.Inc()
 		return
 	} else if err == ErrFailedSelectProvider {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusBadGateway)
 		p.logError(errors.Wrap(err, "failed to select provider"), request)
-		// metrics.Errors502Internal.Inc()
 		releaseRequest(request) //nolint:errcheck
 		return
 	} else if err != nil {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(errors.Wrap(err, "error during provider selection"), request)
-		// metrics.Errors500Internal.Inc()
 		releaseRequest(request) //nolint:errcheck
 		return
 	}
@@ -200,6 +187,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 			Proxy: http.ProxyURL(proxyURL),
 		},
 	}
+	request.Inc(headerSize(r))
 
 	// Send the request to the real proxy
 	resp, err := client.Do(r)
@@ -213,15 +201,18 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
+			request.Inc(int64(len(key) + len(value) + 2))
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
 
 	// Write the response body
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	respBodySize, err := io.Copy(w, resp.Body)
+	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
 		return
 	}
+	request.Inc(respBodySize + 2)
 
 	err = p.config.Accountant.Decrement(request.Password, request.Written)
 	if err != nil {
@@ -236,23 +227,16 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 		return
 	}
 	fmt.Printf("username = %s\tpassword = %s\n", string(username), string(password))
-	// dialDuration := time.Now()
 	upstream, err := request.Provider.Dial([]byte(req.RequestURI), request)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
-		// metrics.Errors504GatewayTimeout.Inc()
 		p.stopTracker(purchase, request)
 		p.logError(err, request)
-		// metrics.IncProviderErrors(request.Provider.Name())
 		releaseRequest(request)
 		return
 	}
-	// metrics.IncProviderConnections(request.Provider.Name())
-	// metrics.ObserveProviderDialTime(request.Provider.Name(), float64(time.Since(dialDuration).Milliseconds()))
 
-	// metrics.ConnectionsHTTPS.Inc()
-
-	// request.Inc(headerSize(ctx))
+	request.Inc(headerSize(req))
 
 	// "Hijack" the client connection to get a TCP (or TLS) socket we can read
 	// and write arbitrary data to/from.
