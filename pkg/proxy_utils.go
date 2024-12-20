@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	ErrConnectionClosed = errors.New("connection closed")
-	ErrIPNotFound       = errors.New("ip not found")
-	ErrInvalidTargeting = errors.New("invalid targeting")
+	ErrConnectionClosed   = errors.New("connection closed")
+	ErrIPNotFound         = errors.New("ip not found")
+	ErrInvalidTargeting   = errors.New("invalid targeting")
+	ErrStickyNotSupported = errors.New("sticky not supported")
 )
 
 func (p *Proxy) copy(account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
@@ -94,19 +95,19 @@ func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Co
 }
 
 func hasAccess(purchase *Purchase, request *Request) error {
-	if len(purchase.IPs) > 0 {
-		_, ok := purchase.IPs[request.UserIP]
-		if !ok {
-			return ErrIPNotFound
-		}
-	}
+	// if len(purchase.IPs) > 0 {
+	// 	_, ok := purchase.IPs[request.UserIP]
+	// 	if !ok {
+	// 		return ErrIPNotFound
+	// 	}
+	// }
 
-	if request.PurchaseType == PurchaseStatic && request.Country != nil {
+	if !purchase.CountryTargeting && request.Country != nil {
 		return ErrInvalidTargeting
 	}
 
-	if request.PurchaseType == PurchaseResidential && request.IP != nil {
-		return ErrInvalidTargeting
+	if !purchase.Sticky && (request.SessionID != "" || request.SessionDuration != 0) {
+		return ErrStickyNotSupported
 	}
 
 	return nil

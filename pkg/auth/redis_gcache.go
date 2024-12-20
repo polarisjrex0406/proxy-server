@@ -81,11 +81,14 @@ func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.P
 		threads := gjson.GetBytes(data, "threads").Int()
 
 		purchase := &pkg.Purchase{
-			ID:      uint(gjson.GetBytes(data, "id").Int()),
-			Threads: threads,
-			IPs:     make(map[string]struct{}),
-			Type:    t,
-			Region:  gjson.GetBytes(data, "region").String(),
+			ID:               uint(gjson.GetBytes(data, "id").Int()),
+			Threads:          threads,
+			IPs:              make(map[string]struct{}),
+			Type:             t,
+			Region:           gjson.GetBytes(data, "region").String(),
+			IPVersion:        pkg.IPVersion(gjson.GetBytes(data, "ip_version").String()),
+			Sticky:           gjson.GetBytes(data, "sticky").Bool(),
+			CountryTargeting: gjson.GetBytes(data, "country_targeting").Bool(),
 		}
 
 		bandwidthLimited := gjson.GetBytes(data, "bandwidth_limited").Bool()

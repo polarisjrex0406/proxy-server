@@ -8,7 +8,17 @@ type PurchaseType string
 
 const (
 	PurchaseStatic      PurchaseType = "static"
-	PurchaseResidential PurchaseType = "residential"
+	PurchaseBackconnect PurchaseType = "backconnect"
+	PurchaseProvider    PurchaseType = "provider"
+	PurchaseSubnet      PurchaseType = "subnet"
+	PurchaseISPPool     PurchaseType = "isp_pool"
+)
+
+type IPVersion string
+
+const (
+	IPv4 IPVersion = "ipv4"
+	IPv6 IPVersion = "ipv6"
 )
 
 type Purchase struct {
@@ -20,4 +30,8 @@ type Purchase struct {
 	ExpireAt time.Time
 
 	Type string
+
+	IPVersion        IPVersion
+	Sticky           bool
+	CountryTargeting bool
 }
