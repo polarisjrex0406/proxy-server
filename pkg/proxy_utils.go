@@ -17,7 +17,7 @@ var (
 	ErrStickyNotSupported = errors.New("sticky not supported")
 )
 
-func (p *Proxy) copy(account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
+func (p *Proxy) copy(purchase *Purchase, account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
 	buf := make([]byte, p.config.BufferSize)
 
 	var accounted, written int64
@@ -39,7 +39,7 @@ LOOP:
 		nr, er := src.Read(buf)
 		accounted += int64(nr)
 
-		if account && accounted >= p.config.AccountBytes {
+		if purchase.BandwidthLimited && account && accounted >= p.config.AccountBytes {
 			err = p.config.Accountant.Decrement(password, accounted)
 			accounted = 0
 		}
@@ -66,7 +66,7 @@ LOOP:
 		}
 	}
 
-	if account && accounted > 0 {
+	if purchase.BandwidthLimited && account && accounted > 0 {
 		err = p.config.Accountant.Decrement(password, accounted)
 	}
 
@@ -79,10 +79,10 @@ func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Co
 
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		return p.copy(accountData, request.Done, request.Password, conn, remote) //nolint:errcheck
+		return p.copy(purchase, accountData, request.Done, request.Password, conn, remote) //nolint:errcheck
 	})
 	g.Go(func() error {
-		return p.copy(accountData, request.Done, request.Password, remote, conn) //nolint:errcheck
+		return p.copy(purchase, accountData, request.Done, request.Password, remote, conn) //nolint:errcheck
 	})
 
 	if err := g.Wait(); err != ErrConnectionClosed {

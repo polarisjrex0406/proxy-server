@@ -104,6 +104,7 @@ func (r *RedisGCache) Authenticate(ctx context.Context, password string) (*pkg.P
 				return nil, pkg.ErrNotEnoughData
 			}
 		}
+		purchase.BandwidthLimited = bandwidthLimited
 
 		ips := gjson.GetBytes(data, "ips")
 		if ips.IsArray() {

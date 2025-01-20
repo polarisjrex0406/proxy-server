@@ -34,4 +34,6 @@ type Purchase struct {
 	IPVersion        IPVersion
 	Sticky           bool
 	CountryTargeting bool
+
+	BandwidthLimited bool
 }

@@ -214,9 +214,11 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	}
 	request.Inc(respBodySize + 2)
 
-	err = p.config.Accountant.Decrement(request.Password, request.Written)
-	if err != nil {
-		p.logError(err, request)
+	if purchase.BandwidthLimited {
+		err = p.config.Accountant.Decrement(request.Password, request.Written)
+		if err != nil {
+			p.logError(err, request)
+		}
 	}
 }
 
