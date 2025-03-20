@@ -188,6 +188,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		},
 	}
 	request.Inc(headerSize(r))
+	p.config.Measure.IncWriteBytes(request.Password, headerSize(r))
 
 	// Send the request to the real proxy
 	resp, err := client.Do(r)
@@ -202,6 +203,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		for _, value := range values {
 			w.Header().Add(key, value)
 			request.Inc(int64(len(key) + len(value) + 2))
+			p.config.Measure.IncReadBytes(request.Password, int64(len(key)+len(value)+2))
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
@@ -213,6 +215,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 		return
 	}
 	request.Inc(respBodySize + 2)
+	p.config.Measure.IncReadBytes(request.Password, respBodySize+2)
 
 	if purchase.BandwidthLimited {
 		err = p.config.Accountant.Decrement(request.Password, request.Written)

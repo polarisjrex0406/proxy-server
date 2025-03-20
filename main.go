@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	_ "github.com/lib/pq"
 	"github.com/omimic12/proxy-server/config"
 	"github.com/omimic12/proxy-server/database"
 	"github.com/omimic12/proxy-server/pkg"
 	"github.com/omimic12/proxy-server/pkg/accountant"
 	"github.com/omimic12/proxy-server/pkg/auth"
+	"github.com/omimic12/proxy-server/pkg/measure"
 	"github.com/omimic12/proxy-server/pkg/router"
 	"github.com/omimic12/proxy-server/pkg/sessions"
 	"github.com/omimic12/proxy-server/pkg/settings"
@@ -102,6 +104,13 @@ func main() {
 		panic(err)
 	}
 
+	influxDbUrl := fmt.Sprintf("http://%s:%d", cfg.InfluxDB.Host, cfg.InfluxDB.Port)
+	influxDbClient := influxdb2.NewClient(influxDbUrl, cfg.InfluxDB.Token)
+	perfMeasure, err := measure.NewInfluxDB(ctx, 500, cfg.InfluxDB.Organization, cfg.InfluxDB.Bucket, influxDbClient, cfg.Sync.Data, logger)
+	if err != nil {
+		panic(err)
+	}
+
 	a, err := auth.NewRedisGCache(
 		ctx,
 		cfg.Authorization.CacheSize,
@@ -157,6 +166,7 @@ func main() {
 		pkg.WithAuth(a),
 		pkg.WithRouter(rr),
 		pkg.WithAccountant(dataAccountant),
+		pkg.WithMeasure(perfMeasure),
 		pkg.WithSessions(sessionStorage),
 		pkg.WithUsernameParser(parser),
 		pkg.WithTracker(requestTracker),

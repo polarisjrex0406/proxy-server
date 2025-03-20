@@ -70,7 +70,7 @@ func NewRedis(
 	}, nil
 }
 
-func (r *Redis) Decrement(password string, byte int64) error {
-	r.data <- password + "," + strconv.FormatInt(byte, 10)
+func (r *Redis) Decrement(password string, bytes int64) error {
+	r.data <- password + "," + strconv.FormatInt(bytes, 10)
 	return nil
 }

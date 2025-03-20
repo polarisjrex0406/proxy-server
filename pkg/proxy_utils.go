@@ -17,7 +17,7 @@ var (
 	ErrStickyNotSupported = errors.New("sticky not supported")
 )
 
-func (p *Proxy) copy(purchase *Purchase, account bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
+func (p *Proxy) copy(purchase *Purchase, account bool, isRead bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
 	buf := make([]byte, p.config.BufferSize)
 
 	var accounted, written int64
@@ -39,8 +39,17 @@ LOOP:
 		nr, er := src.Read(buf)
 		accounted += int64(nr)
 
-		if purchase.BandwidthLimited && account && accounted >= p.config.AccountBytes {
-			err = p.config.Accountant.Decrement(password, accounted)
+		if accounted >= p.config.AccountBytes {
+			if isRead {
+				err = p.config.Measure.IncReadBytes(password, accounted)
+			} else {
+				err = p.config.Measure.IncWriteBytes(password, accounted)
+			}
+
+			if purchase.BandwidthLimited && account {
+				err = p.config.Accountant.Decrement(password, accounted)
+			}
+
 			accounted = 0
 		}
 
@@ -66,8 +75,16 @@ LOOP:
 		}
 	}
 
-	if purchase.BandwidthLimited && account && accounted > 0 {
-		err = p.config.Accountant.Decrement(password, accounted)
+	if accounted >= 0 {
+		if isRead {
+			err = p.config.Measure.IncReadBytes(password, accounted)
+		} else {
+			err = p.config.Measure.IncWriteBytes(password, accounted)
+		}
+
+		if purchase.BandwidthLimited && account {
+			err = p.config.Accountant.Decrement(password, accounted)
+		}
 	}
 
 	_ = dst.Close()
@@ -79,10 +96,10 @@ func (p *Proxy) tunnel(purchase *Purchase, request *Request, remote, conn net.Co
 
 	g, _ := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		return p.copy(purchase, accountData, request.Done, request.Password, conn, remote) //nolint:errcheck
+		return p.copy(purchase, accountData, false, request.Done, request.Password, conn, remote) //nolint:errcheck
 	})
 	g.Go(func() error {
-		return p.copy(purchase, accountData, request.Done, request.Password, remote, conn) //nolint:errcheck
+		return p.copy(purchase, accountData, true, request.Done, request.Password, remote, conn) //nolint:errcheck
 	})
 
 	if err := g.Wait(); err != ErrConnectionClosed {

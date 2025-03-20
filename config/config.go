@@ -70,6 +70,14 @@ type Config struct {
 		}
 	}
 
+	InfluxDB struct {
+		Host         string `long:"influxdb-host" env:"INFLUXDB_HOST" default:"localhost"`
+		Port         int    `long:"influxdb-port" env:"INFLUXDB_PORT" default:"8086"`
+		Token        string `long:"influxdb-token" env:"INFLUXDB_TOKEN"`
+		Organization string `long:"influxdb-org" env:"INFLUXDB_ORG" default:"omimic"`
+		Bucket       string `long:"influxdb-bucket" env:"INFLUXDB_BUCKET" default:"mimicproxy"`
+	}
+
 	HTTP struct {
 		ReadBufferSize  int           `long:"http-read-buffer" env:"FASTHTTP_READ_BUFFER" default:"4096" description:""`
 		WriteBufferSize int           `long:"http-write-buffer" env:"FASTHTTP_WRITE_BUFFER" default:"4096" description:""`

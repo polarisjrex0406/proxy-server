@@ -20,6 +20,7 @@ type Options struct {
 	Router            Router
 	ConnectionTracker ConnectionTracker
 	Accountant        Accountant
+	Measure           Measure
 	Parser            UsernameParser
 	Logger            *zap.Logger
 }
@@ -95,6 +96,12 @@ func WithTracker(tracker ConnectionTracker) Option {
 func WithAccountant(accountant Accountant) Option {
 	return func(options *Options) {
 		options.Accountant = accountant
+	}
+}
+
+func WithMeasure(measure Measure) Option {
+	return func(options *Options) {
+		options.Measure = measure
 	}
 }
 
