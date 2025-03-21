@@ -133,6 +133,8 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	p.config.Measure.IncRequest(request.Password)
+
 	if req.Method == http.MethodConnect {
 		p.serveHTTPS(purchase, request, w, req)
 		return

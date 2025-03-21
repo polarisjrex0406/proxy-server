@@ -22,10 +22,11 @@ type (
 )
 
 const (
-	strBandwidth  = "bandwidth"
+	strUsage      = "usage"
 	strPassword   = "password"
 	strReadBytes  = "readbytes"
 	strWriteBytes = "writebytes"
+	strRequests   = "requests"
 )
 
 func NewInfluxDB(
@@ -60,7 +61,6 @@ func NewInfluxDB(
 						logger.Error("failed to write data", zap.Error(err))
 					}
 				}
-
 				buf = []Metric{}
 			case d := <-data:
 				buf = append(buf, d)
@@ -74,34 +74,27 @@ func NewInfluxDB(
 }
 
 func (i *InfluxDB) IncReadBytes(password string, bytes int64) error {
-	tags := map[string]string{
-		strPassword: password,
-	}
-	fields := map[string]interface{}{
-		strReadBytes: bytes,
-	}
-
-	metric := Metric{
-		measurement: strBandwidth,
-		tags:        tags,
-		fields:      fields,
-		ts:          time.Now(),
-	}
-
-	i.data <- metric
-	return nil
+	return i.composeMetric(password, strReadBytes, bytes)
 }
 
 func (i *InfluxDB) IncWriteBytes(password string, bytes int64) error {
+	return i.composeMetric(password, strWriteBytes, bytes)
+}
+
+func (i *InfluxDB) IncRequest(password string) error {
+	return i.composeMetric(password, strRequests, 1)
+}
+
+func (i *InfluxDB) composeMetric(password string, field string, value int64) error {
 	tags := map[string]string{
 		strPassword: password,
 	}
 	fields := map[string]interface{}{
-		strWriteBytes: bytes,
+		field: value,
 	}
 
 	metric := Metric{
-		measurement: strBandwidth,
+		measurement: strUsage,
 		tags:        tags,
 		fields:      fields,
 		ts:          time.Now(),
