@@ -105,8 +105,8 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if purchase.Threads > 0 &&
-		p.config.ConnectionTracker.Watch(request.ID, request.PurchaseID, request.Done) >= purchase.Threads {
+	threads := p.config.ConnectionTracker.Watch(request.ID, request.PurchaseID, request.Done)
+	if purchase.Threads > 0 && threads >= purchase.Threads {
 		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
 		w.WriteHeader(http.StatusTooManyRequests)
 		releaseRequest(request)
@@ -134,6 +134,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	p.config.Measure.IncRequest(request.Password)
+	p.config.Measure.LogThreads(request.Password, threads)
 
 	if req.Method == http.MethodConnect {
 		p.serveHTTPS(purchase, request, w, req)
@@ -270,11 +271,13 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 }
 
 func (p *Proxy) stopTracker(purchase *Purchase, request *Request) {
+	threads := p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
+	p.config.Measure.LogThreads(request.Password, threads)
+
 	if purchase.Threads <= 0 {
 		return
 	}
 
-	threads := p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
 	if threads <= 0 {
 		p.config.ZeroThreads <- map[uint]int64{
 			request.PurchaseID: threads,
@@ -283,11 +286,13 @@ func (p *Proxy) stopTracker(purchase *Purchase, request *Request) {
 }
 
 func (p *Proxy) deleteTracker(purchase *Purchase, request *Request) {
+	threads := p.config.ConnectionTracker.Delete(request.ID, request.PurchaseID)
+	p.config.Measure.LogThreads(request.Password, threads)
+
 	if purchase.Threads <= 0 {
 		return
 	}
 
-	threads := p.config.ConnectionTracker.Delete(request.ID, request.PurchaseID)
 	if threads <= 0 {
 		p.config.ZeroThreads <- map[uint]int64{
 			request.PurchaseID: threads,

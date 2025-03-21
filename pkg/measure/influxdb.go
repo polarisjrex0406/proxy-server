@@ -27,6 +27,7 @@ const (
 	strReadBytes  = "readbytes"
 	strWriteBytes = "writebytes"
 	strRequests   = "requests"
+	strThreads    = "threads"
 )
 
 func NewInfluxDB(
@@ -83,6 +84,10 @@ func (i *InfluxDB) IncWriteBytes(password string, bytes int64) error {
 
 func (i *InfluxDB) IncRequest(password string) error {
 	return i.composeMetric(password, strRequests, 1)
+}
+
+func (i *InfluxDB) LogThreads(password string, threads int64) error {
+	return i.composeMetric(password, strThreads, threads)
 }
 
 func (i *InfluxDB) composeMetric(password string, field string, value int64) error {
