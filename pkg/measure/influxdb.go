@@ -22,12 +22,16 @@ type (
 )
 
 const (
-	strUsage      = "usage"
-	strPassword   = "password"
-	strReadBytes  = "readbytes"
-	strWriteBytes = "writebytes"
-	strRequests   = "requests"
-	strThreads    = "threads"
+	strUsage       = "usage"
+	strPassword    = "password"
+	strReadBytes   = "readbytes"
+	strWriteBytes  = "writebytes"
+	strRequests    = "requests"
+	strThreads     = "threads"
+	strOperation   = "operation"
+	strUptime      = "uptime"
+	strHealthCheck = "healthcheck"
+	strMinute      = "minute"
 )
 
 func NewInfluxDB(
@@ -36,21 +40,24 @@ func NewInfluxDB(
 	org string,
 	bucket string,
 	client influxdb2.Client,
-	period time.Duration,
+	metricPeriod time.Duration,
+	healthCheckPeriod time.Duration,
 	logger *zap.Logger,
 ) (*InfluxDB, error) {
 	var data = make(chan Metric, bufferSize)
 	go func() {
-		ticker := time.NewTicker(period)
-		defer ticker.Stop()
+		metricTicker := time.NewTicker(metricPeriod)
+		defer metricTicker.Stop()
+
+		healthCheckTicker := time.NewTicker(healthCheckPeriod)
+		defer healthCheckTicker.Stop()
 
 		buf := []Metric{}
-
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-metricTicker.C:
 				if len(buf) == 0 {
 					continue
 				}
@@ -65,6 +72,19 @@ func NewInfluxDB(
 				buf = []Metric{}
 			case d := <-data:
 				buf = append(buf, d)
+			case <-healthCheckTicker.C:
+				tags := map[string]string{
+					strUptime: strMinute,
+				}
+				fields := map[string]interface{}{
+					strHealthCheck: 1,
+				}
+
+				writeAPI := client.WriteAPIBlocking(org, bucket)
+				point := influxdb2.NewPoint(strOperation, tags, fields, time.Now())
+				if err := writeAPI.WritePoint(context.Background(), point); err != nil {
+					logger.Error("failed to write data", zap.Error(err))
+				}
 			}
 		}
 	}()

@@ -141,6 +141,11 @@ type Config struct {
 		Data     time.Duration `long:"sync-data" env:"SYNC_DATA" default:"1s"`
 	}
 
+	Measure struct {
+		Metric      time.Duration `long:"measure-metric" env:"MEASURE_METRIC" default:"1s"`
+		HealthCheck time.Duration `long:"measure-health-check" env:"MEASURE_HEALTH_CHECK" default:"1m"`
+	}
+
 	Session struct {
 		CacheSize   int           `long:"session-cache-size" env:"SESSION_CACHE_SIZE" default:"10000" description:""`
 		Duration    time.Duration `long:"session-duration" env:"SESSION_DURATION" default:"10m" description:""`

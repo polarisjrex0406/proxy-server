@@ -106,7 +106,16 @@ func main() {
 
 	influxDbUrl := fmt.Sprintf("http://%s:%d", cfg.InfluxDB.Host, cfg.InfluxDB.Port)
 	influxDbClient := influxdb2.NewClient(influxDbUrl, cfg.InfluxDB.Token)
-	perfMeasure, err := measure.NewInfluxDB(ctx, 500, cfg.InfluxDB.Organization, cfg.InfluxDB.Bucket, influxDbClient, cfg.Sync.Data, logger)
+	perfMeasure, err := measure.NewInfluxDB(
+		ctx,
+		500,
+		cfg.InfluxDB.Organization,
+		cfg.InfluxDB.Bucket,
+		influxDbClient,
+		cfg.Measure.Metric,
+		cfg.Measure.HealthCheck,
+		logger,
+	)
 	if err != nil {
 		panic(err)
 	}
