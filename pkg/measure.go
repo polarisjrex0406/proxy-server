@@ -5,4 +5,5 @@ type Measure interface {
 	IncWriteBytes(password string, bytes int64) error
 	IncRequest(password string) error
 	LogThreads(password string, threads int64) error
+	CountError(password, err string) error
 }

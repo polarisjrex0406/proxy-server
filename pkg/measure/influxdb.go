@@ -34,6 +34,17 @@ const (
 	strMinute      = "minute"
 )
 
+var (
+	Errors400BadRequest      = "proxy_errors_400"
+	Errors403Forbidden       = "proxy_errors_403"
+	Errors407AuthRequired    = "proxy_errors_407"
+	Errors402PaymentRequired = "proxy_errors_402"
+	Errors429TooManyRequests = "proxy_errors_429"
+	Errors500Internal        = "proxy_errors_500"
+	Errors502Internal        = "proxy_errors_502"
+	Errors504GatewayTimeout  = "proxy_errors_504"
+)
+
 func NewInfluxDB(
 	ctx context.Context,
 	bufferSize int,
@@ -108,6 +119,10 @@ func (i *InfluxDB) IncRequest(password string) error {
 
 func (i *InfluxDB) LogThreads(password string, threads int64) error {
 	return i.composeMetric(password, strThreads, threads)
+}
+
+func (i *InfluxDB) CountError(password, err string) error {
+	return i.composeMetric(password, err, 1)
 }
 
 func (i *InfluxDB) composeMetric(password string, field string, value int64) error {

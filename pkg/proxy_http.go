@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/omimic12/proxy-server/constants"
+	"github.com/omimic12/proxy-server/pkg/measure"
 	"github.com/omimic12/proxy-server/pkg/zerocopy"
 	"github.com/pkg/errors"
 )
@@ -75,11 +76,13 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	} else if err == ErrNotEnoughData {
 		w.WriteHeader(http.StatusPaymentRequired)
+		p.config.Measure.CountError(request.Password, measure.Errors402PaymentRequired)
 		releaseRequest(request)
 		return
 	} else if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(err, request)
+		p.config.Measure.CountError(request.Password, measure.Errors500Internal)
 		releaseRequest(request)
 		return
 	}
@@ -91,16 +94,19 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	if err == ErrDomainBlocked || err == ErrIPNotAllowed {
 		p.config.Logger.Info(request.UserIP)
 		w.WriteHeader(http.StatusForbidden)
+		p.config.Measure.CountError(request.Password, measure.Errors403Forbidden)
 		releaseRequest(request)
 		return
 	} else if err == ErrInvalidTargeting {
 		w.WriteHeader(http.StatusBadRequest)
 		p.logError(err, request)
+		p.config.Measure.CountError(request.Password, measure.Errors400BadRequest)
 		releaseRequest(request)
 		return
 	} else if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(err, request)
+		p.config.Measure.CountError(request.Password, measure.Errors500Internal)
 		releaseRequest(request)
 		return
 	}
@@ -109,6 +115,7 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	if purchase.Threads > 0 && threads >= purchase.Threads {
 		p.config.ConnectionTracker.Stop(request.ID, request.PurchaseID)
 		w.WriteHeader(http.StatusTooManyRequests)
+		p.config.Measure.CountError(request.Password, measure.Errors429TooManyRequests)
 		releaseRequest(request)
 		return
 	}
@@ -118,17 +125,20 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusForbidden)
 		releaseRequest(request) //nolint:errcheck
+		p.config.Measure.CountError(request.Password, measure.Errors403Forbidden)
 		return
 	} else if err == ErrFailedSelectProvider {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusBadGateway)
 		p.logError(errors.Wrap(err, "failed to select provider"), request)
+		p.config.Measure.CountError(request.Password, measure.Errors502Internal)
 		releaseRequest(request) //nolint:errcheck
 		return
 	} else if err != nil {
 		p.stopTracker(purchase, request)
 		w.WriteHeader(http.StatusInternalServerError)
 		p.logError(errors.Wrap(err, "error during provider selection"), request)
+		p.config.Measure.CountError(request.Password, measure.Errors500Internal)
 		releaseRequest(request) //nolint:errcheck
 		return
 	}
@@ -153,6 +163,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	hostname, username, password, credentials, err := request.Provider.Credentials(request) // FIXME looks awkward
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		return
 	}
 	fmt.Printf("username = %s\tpassword = %s\n", string(username), string(password))
@@ -161,6 +172,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	r, err := http.NewRequest(req.Method, req.URL.String(), req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		return
 	}
 
@@ -181,6 +193,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	proxyURL, err := url.Parse(proxyStr)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		return
 	}
 
@@ -197,6 +210,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	resp, err := client.Do(r)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		return
 	}
 	defer resp.Body.Close()
@@ -215,6 +229,7 @@ func (p *Proxy) serveHTTP(purchase *Purchase, request *Request, w http.ResponseW
 	respBodySize, err := io.Copy(w, resp.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		return
 	}
 	request.Inc(respBodySize + 2)
@@ -238,6 +253,7 @@ func (p *Proxy) serveHTTPS(purchase *Purchase, request *Request, w http.Response
 	upstream, err := request.Provider.Dial([]byte(req.RequestURI), request)
 	if err != nil {
 		w.WriteHeader(http.StatusGatewayTimeout)
+		p.config.Measure.CountError(request.Password, measure.Errors504GatewayTimeout)
 		p.stopTracker(purchase, request)
 		p.logError(err, request)
 		releaseRequest(request)
