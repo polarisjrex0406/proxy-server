@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -15,6 +16,17 @@ var (
 	ErrIPNotFound         = errors.New("ip not found")
 	ErrInvalidTargeting   = errors.New("invalid targeting")
 	ErrStickyNotSupported = errors.New("sticky not supported")
+)
+
+type (
+	FeatureAdoption string
+)
+
+var (
+	FeatureAdoptionRotating         = FeatureAdoption("rotating")
+	FeatureAdoptionSticky           = FeatureAdoption("sticky")
+	FeatureAdoptionIPTargeting      = FeatureAdoption("ip_targeting")
+	FeatureAdoptionCountryTargeting = FeatureAdoption("country_targeting")
 )
 
 func (p *Proxy) copy(purchase *Purchase, account bool, isRead bool, done <-chan struct{}, password string, src net.Conn, dst net.Conn) (err error) {
@@ -128,4 +140,29 @@ func hasAccess(purchase *Purchase, request *Request) error {
 	}
 
 	return nil
+}
+
+func adoptedFeatures(request *Request) []FeatureAdoption {
+	adoptedFeatures := []FeatureAdoption{}
+	// Check adopted features
+	for _, feat := range request.Features {
+		if bytes.EqualFold(feat, Rotating) {
+			adoptedFeatures = append(adoptedFeatures, FeatureAdoptionRotating)
+			break
+		}
+
+		if bytes.EqualFold(feat, Sticky) {
+			adoptedFeatures = append(adoptedFeatures, FeatureAdoptionSticky)
+			break
+		}
+	}
+
+	if request.IP != nil {
+		adoptedFeatures = append(adoptedFeatures, FeatureAdoptionIPTargeting)
+	}
+
+	if request.Country != nil {
+		adoptedFeatures = append(adoptedFeatures, FeatureAdoptionCountryTargeting)
+	}
+	return adoptedFeatures
 }

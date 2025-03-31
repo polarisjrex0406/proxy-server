@@ -125,6 +125,10 @@ func (i *InfluxDB) CountError(password, err string) error {
 	return i.composeMetric(password, err, 1)
 }
 
+func (i *InfluxDB) LogAdoptedFeature(password, feature string) error {
+	return i.composeMetric(password, feature, 1)
+}
+
 func (i *InfluxDB) composeMetric(password string, field string, value int64) error {
 	tags := map[string]string{
 		strPassword: password,

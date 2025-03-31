@@ -6,4 +6,5 @@ type Measure interface {
 	IncRequest(password string) error
 	LogThreads(password string, threads int64) error
 	CountError(password, err string) error
+	LogAdoptedFeature(password, feature string) error
 }

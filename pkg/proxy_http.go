@@ -146,6 +146,12 @@ func (p *Proxy) handlerHTTP(w http.ResponseWriter, req *http.Request) {
 	p.config.Measure.IncRequest(request.Password)
 	p.config.Measure.LogThreads(request.Password, threads)
 
+	// Log feature adoption
+	adoptedFeatures := adoptedFeatures(request)
+	for _, feat := range adoptedFeatures {
+		p.config.Measure.LogAdoptedFeature(request.Password, string(feat))
+	}
+
 	if req.Method == http.MethodConnect {
 		p.serveHTTPS(purchase, request, w, req)
 		return
